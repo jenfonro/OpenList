@@ -420,3 +420,4 @@ func (d *BaiduNetdisk) uploadSlice(ctx context.Context, params map[string]string
 }
 
 var _ driver.Driver = (*BaiduNetdisk)(nil)
+
