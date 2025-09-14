@@ -31,10 +31,6 @@ jobs:
       - uses: benjlevesque/short-sha@v3.0
         id: short-sha
 
-      - name: Get tag name
-        id: vars
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -57,14 +53,14 @@ jobs:
             github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=${{ github.run_id }}
             github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=The OpenList Projects Contributors <noreply@openlist.team>
             github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=${{ steps.short-sha.outputs.sha }}
-            github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${{ steps.vars.outputs.tag }}
+            github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${{ github.ref_name }}
             github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=rolling
           output: openlist$ext
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openlist_${{ steps.vars.outputs.tag }}_${{ matrix.target }}
+          name: openlist_${{ matrix.target }}
           path: build/*
 
   release:
@@ -76,17 +72,13 @@ jobs:
         with:
           path: artifacts
 
-      - name: Get tag name
-        id: vars
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.tag }}
-          name: Release ${{ steps.vars.outputs.tag }}
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}   # 这里保证 release 名称就是 v1.1.1
           draft: false
           prerelease: false
-          files: artifacts/**/*
+          files: artifacts/**/*         # 明确包含所有 target 的文件
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
