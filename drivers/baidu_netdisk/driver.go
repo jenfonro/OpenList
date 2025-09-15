@@ -304,6 +304,8 @@ uploadLoop:
 		}
 
 		totalParts := len(precreateResp.BlockList)
+		doneParts := 0 // 新增计数器
+
 		for i, partseq := range precreateResp.BlockList {
 			if utils.IsCanceled(upCtx) || partseq < 0 {
 				continue
@@ -328,15 +330,9 @@ uploadLoop:
 					return err
 				}
 				precreateResp.BlockList[i] = -1
-				// 进度
-				done := 0
-				for _, v := range precreateResp.BlockList {
-					if v < 0 {
-						done++
-					}
-				}
+				doneParts++ // 直接递增计数器
 				if totalParts > 0 {
-					up(float64(done) * 100.0 / float64(totalParts))
+					up(float64(doneParts) * 100.0 / float64(totalParts))
 				}
 				return nil
 			})
@@ -413,13 +409,13 @@ func (d *BaiduNetdisk) uploadSlice(ctx context.Context, params map[string]string
 	errNo := utils.Json.Get(res.Body(), "errno").ToInt()
 	respStr := res.String()
 	lower := strings.ToLower(respStr)
-	if strings.Contains(lower, "uploadid") && (strings.Contains(lower, "invalid") || strings.Contains(lower, "expired") || strings.Contains(lower, "not found")) {
+// 合并 uploadid 过期检测逻辑
+	if strings.Contains(lower, "uploadid") &&
+		(strings.Contains(lower, "invalid") || strings.Contains(lower, "expired") || strings.Contains(lower, "not found")) {
 		return ErrUploadIDExpired
 	}
+
 	if errCode != 0 || errNo != 0 {
-		if strings.Contains(lower, "invalid uploadid") {
-			return ErrUploadIDExpired
-		}
 		return errs.NewErr(errs.StreamIncomplete, "error uploading to baidu, response=%s", res.String())
 	}
 	return nil
