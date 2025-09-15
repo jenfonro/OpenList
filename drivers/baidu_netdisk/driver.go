@@ -300,7 +300,7 @@ uploadLoop:
 
 		cacheReaderAt, okReaderAt := cache.(io.ReaderAt)
 		if !okReaderAt {
-			return nil, fmt.Errorf("cache does not implement io.ReaderAt")
+			return nil, fmt.Errorf("cache object must implement io.ReaderAt interface for upload operations")
 		}
 
 		totalParts := len(precreateResp.BlockList)
