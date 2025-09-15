@@ -172,15 +172,18 @@ func (d *BaiduNetdisk) PutRapid(ctx context.Context, dstDir model.Obj, stream mo
 	if err != nil {
 		return nil, err
 	}
-	// 修复时间
+	// 修复时间，具体原因见 Put 方法注释的 **注意**
 	newFile.Ctime = stream.CreateTime().Unix()
 	newFile.Mtime = stream.ModTime().Unix()
 	return fileToObj(newFile), nil
 }
 
 // Put 文件上传，支持断点续传和 uploadid 过期重试
+//
+// **注意**: 截至 2024/04/20 百度云盘 api 接口返回的时间永远是当前时间，而不是文件时间。
+// 而实际上云盘存储的时间是文件时间，所以此处需要覆盖时间，保证缓存与云盘的数据一致
 func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) (model.Obj, error) {
-	// 尝试秒传
+	// rapid upload 尝试秒传
 	if newObj, err := d.PutRapid(ctx, dstDir, stream); err == nil {
 		return newObj, nil
 	}
@@ -213,7 +216,7 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 		lastBlockSize = sliceSize
 	}
 
-	// 计算 md5
+	//cal md5 for first 256k data 计算 md5
 	const SliceSize int64 = 256 * utils.KB
 	blockList := make([]string, 0, count)
 	byteSize := sliceSize
@@ -279,6 +282,8 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 			return nil, err
 		}
 		if precreateResp.ReturnType == 2 {
+			//rapid upload, since got md5 match from baidu server
+			// 修复时间，具体原因见 Put 方法注释的 **注意**
 			precreateResp.File.Ctime = ctime
 			precreateResp.File.Mtime = mtime
 			return fileToObj(precreateResp.File), nil
@@ -386,6 +391,7 @@ uploadLoop:
 	if err != nil {
 		return nil, err
 	}
+	// 修复时间，具体原因见 Put 方法注释的 **注意**
 	newFile.Ctime = ctime
 	newFile.Mtime = mtime
 	// 上传成功清理进度
