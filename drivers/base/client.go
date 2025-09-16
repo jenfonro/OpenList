@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
-	"github.com/OpenListTeam/OpenList/v4/internal/net"
 	"github.com/go-resty/resty/v2"
 )
 
