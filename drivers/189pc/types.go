@@ -1,4 +1,4 @@
-package _189pc
+﻿package _189pc
 
 import (
 	"encoding/xml"
@@ -10,7 +10,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 )
 
-// 居然有四种返回方�?
+// 居然有四种返回方式
 type RespErr struct {
 	ResCode    any    `json:"res_code"` // int or string
 	ResMessage string `json:"res_message"`
@@ -69,18 +69,18 @@ func (e *RespErr) Error() string {
 }
 
 type BaseLoginParam struct {
-	// 请求头参�?
+	// 请求头参�?
 	Lt    string
 	ReqId string
 
 	// 表单参数
 	ParamId string
 
-	// 验证�?
+	// 验证�?
 	CaptchaToken string
 }
 
-// QRLoginParam 用于暂存二维码登录过程中的参�?
+// QRLoginParam 用于暂存二维码登录过程中的参�?
 type QRLoginParam struct {
 	BaseLoginParam
 
@@ -129,10 +129,10 @@ type UserSessionResp struct {
 	GetFileDiffSpan int `json:"getFileDiffSpan"`
 	GetUserInfoSpan int `json:"getUserInfoSpan"`
 
-	// 个人�?
+	// 个人�?
 	SessionKey    string `json:"sessionKey"`
 	SessionSecret string `json:"sessionSecret"`
-	// 家庭�?
+	// 家庭�?
 	FamilySessionKey    string `json:"familySessionKey"`
 	FamilySessionSecret string `json:"familySessionSecret"`
 }
@@ -149,7 +149,7 @@ type AppSessionResp struct {
 	RefreshToken string `json:"refreshToken"`
 }
 
-// 家庭云账�?
+// 家庭云账�?
 type FamilyInfoListResp struct {
 	FamilyInfoResp []FamilyInfoResp `json:"familyInfoResp"`
 }
@@ -206,7 +206,7 @@ func (c *Cloud189File) GetID() string      { return string(c.ID) }
 func (c *Cloud189File) GetPath() string    { return "" }
 func (c *Cloud189File) Thumb() string      { return c.Icon.SmallUrl }
 
-// 文件�?
+// 文件�?
 type Cloud189Folder struct {
 	ID       String `json:"id"`
 	ParentID int64  `json:"parentId"`
@@ -251,9 +251,9 @@ type Cloud189FilesResp struct {
 type BatchTaskInfo struct {
 	// FileId 文件ID
 	FileId string `json:"fileId"`
-	// FileName 文件�?
+	// FileName 文件�?
 	FileName string `json:"fileName"`
-	// IsFolder 是否是文件夹�?-否，1-�?
+	// IsFolder 是否是文件夹�?-否，1-�?
 	IsFolder int `json:"isFolder"`
 	// SrcParentId 文件所在父目录ID
 	SrcParentId string `json:"srcParentId,omitempty"`
@@ -294,15 +294,15 @@ type UploadProgress struct {
 	UploadParts []string
 }
 
-/* 第二种上传方�?*/
+/* 第二种上传方�?*/
 type CreateUploadFileResp struct {
 	// 上传文件请求ID
 	UploadFileId int64 `json:"uploadFileId"`
 	// 上传文件数据的URL路径
 	FileUploadUrl string `json:"fileUploadUrl"`
-	// 上传文件完成后确认路�?
+	// 上传文件完成后确认路�?
 	FileCommitUrl string `json:"fileCommitUrl"`
-	// 文件是否已存在云盘中�?-未存在，1-已存�?
+	// 文件是否已存在云盘中�?-未存在，1-已存�?
 	FileDataExists int `json:"fileDataExists"`
 }
 
@@ -371,7 +371,7 @@ type BatchTaskStateResp struct {
 	SuccessedCount      int     `json:"successedCount"`
 	SuccessedFileIDList []int64 `json:"successedFileIdList"`
 	TaskID              string  `json:"taskId"`
-	TaskStatus          int     `json:"taskStatus"` //1 初始�?2 存在冲突 3 执行中，4 完成
+	TaskStatus          int     `json:"taskStatus"` //1 初始�?2 存在冲突 3 执行中，4 完成
 }
 
 type BatchTaskConflictTaskInfoResp struct {

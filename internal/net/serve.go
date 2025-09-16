@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
@@ -271,7 +270,23 @@ var httpClient *http.Client
 
 func HttpClient() *http.Client {
 	once.Do(func() {
-		httpClient = base.HttpClient
+		httpClient = &http.Client{
+			Timeout: time.Hour * 48,
+			Transport: &http.Transport{
+				Proxy: func(req *http.Request) (*url.URL, error) {
+					if addr := req.Header.Get("X-Driver-Proxy-Addr"); addr != "" {
+						return url.Parse(addr)
+					}
+					if v := req.Context().Value("X-Driver-Proxy-Addr"); v != nil {
+						if s, ok := v.(string); ok && s != "" {
+							return url.Parse(s)
+						}
+					}
+					return http.ProxyFromEnvironment(req) // Fallback to environment proxy
+				},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify},
+			},
+		}
 		httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")

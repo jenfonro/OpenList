@@ -1,4 +1,4 @@
-package github_releases
+﻿package github_releases
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// 发�?GET 请求
+// 发送GET 请求
 func (d *GithubReleases) GetRequest(url string) (*resty.Response, error) {
 	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Accept", "application/vnd.github+json")
@@ -60,7 +60,7 @@ func (d *GithubReleases) ParseRepos(text string) ([]MountPoint, error) {
 	return points, nil
 }
 
-// 获取下一级目�?
+// 获取下一级目�?
 func GetNextDir(wholePath string, basePath string) string {
 	basePath = fmt.Sprintf("%s/", strings.TrimRight(basePath, "/"))
 	if !strings.HasPrefix(wholePath, basePath) {
