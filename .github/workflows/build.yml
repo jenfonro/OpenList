@@ -39,7 +39,7 @@ jobs:
         run: bash build.sh dev web
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: "https://github.com/jenfonro/OpenList-Frontend"
+          FRONTEND_REPO: "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/jenfonro/OpenList-Frontend.git"
 
       - name: Build
         uses: OpenListTeam/cgo-actions@v1.2.2
