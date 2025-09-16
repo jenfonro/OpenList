@@ -102,7 +102,7 @@ func (d *LanZou) request(url string, method string, callback base.ReqCallback, u
 		})
 		req = upClient.R()
 	} else {
-		req = base.RestyClient.R()
+		req = base.RWithProxy(d.DriverProxyAddr)
 	}
 
 	req.SetHeaders(map[string]string{
@@ -171,7 +171,7 @@ func (d *LanZou) GetAllFiles(folderID string) ([]model.Obj, error) {
 	), nil
 }
 
-// 通过ID获取文件夹
+// 通过ID获取文件�?
 func (d *LanZou) GetFolders(folderID string) ([]FileOrFolder, error) {
 	var resp RespText[[]FileOrFolder]
 	_, err := d.doupload(func(req *resty.Request) {
@@ -250,7 +250,7 @@ var isFolderReg = regexp.MustCompile(`id="infos"`)
 // 获取文件文件夹基础信息
 
 // 获取文件名称
-var nameFindReg = regexp.MustCompile(`<title>(.+?) - 蓝奏云</title>|id="filenajax">(.+?)</div>|var filename = '(.+?)';|<div style="font-size.+?>([^<>].+?)</div>|<div class="filethetext".+?>([^<>]+?)</div>`)
+var nameFindReg = regexp.MustCompile(`<title>(.+?) - 蓝奏�?/title>|id="filenajax">(.+?)</div>|var filename = '(.+?)';|<div style="font-size.+?>([^<>].+?)</div>|<div class="filethetext".+?>([^<>]+?)</div>`)
 
 // 获取文件大小
 var sizeFindReg = regexp.MustCompile(`(?i)大小\W*([0-9.]+\s*[bkm]+)`)
@@ -258,7 +258,7 @@ var sizeFindReg = regexp.MustCompile(`(?i)大小\W*([0-9.]+\s*[bkm]+)`)
 // 获取文件时间
 var timeFindReg = regexp.MustCompile(`\d+\s*[秒天分小][钟时]?前|[昨前]天|\d{4}-\d{2}-\d{2}`)
 
-// 查找分享文件夹子文件夹ID和名称
+// 查找分享文件夹子文件夹ID和名�?
 var findSubFolderReg = regexp.MustCompile(`(?i)(?:folderlink|mbxfolder).+href="/(.+?)"(?:.+filename")?>(.+?)<`)
 
 // 获取下载页面链接
@@ -267,7 +267,7 @@ var findDownPageParamReg = regexp.MustCompile(`<iframe.*?src="(.+?)"`)
 // 获取文件ID
 var findFileIDReg = regexp.MustCompile(`'/ajaxm\.php\?file=(\d+)'`)
 
-// 获取分享链接主界面
+// 获取分享链接主界�?
 func (d *LanZou) getShareUrlHtml(shareID string) (string, error) {
 	var vs string
 	for i := 0; i < 3; i++ {
@@ -288,7 +288,7 @@ func (d *LanZou) getShareUrlHtml(shareID string) (string, error) {
 		if strings.Contains(firstPageDataStr, "取消分享") {
 			return "", ErrFileShareCancel
 		}
-		if strings.Contains(firstPageDataStr, "文件不存在") {
+		if strings.Contains(firstPageDataStr, "文件不存�?) {
 			return "", ErrFileNotExist
 		}
 
@@ -330,8 +330,8 @@ func (d *LanZou) GetFileOrFolderByShareUrl(shareID, pwd string) ([]model.Obj, er
 }
 
 // 通过分享链接获取文件(下载链接也使用此方法)
-// FileOrFolderByShareUrl 包含 pwd 和 url 字段
-// 参考 https://github.com/zaxtyson/LanZouCloud-API/blob/ab2e9ec715d1919bf432210fc16b91c6775fbb99/lanzou/api/core.py#L440
+// FileOrFolderByShareUrl 包含 pwd �?url 字段
+// 参�?https://github.com/zaxtyson/LanZouCloud-API/blob/ab2e9ec715d1919bf432210fc16b91c6775fbb99/lanzou/api/core.py#L440
 func (d *LanZou) GetFilesByShareUrl(shareID, pwd string) (file *FileOrFolderByShareUrl, err error) {
 	pageData, err := d.getShareUrlHtml(shareID)
 	if err != nil {
@@ -352,7 +352,7 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 	sharePageData = RemoveNotes(sharePageData)
 	sharePageData = RemoveJSComment(sharePageData)
 
-	// 需要密码
+	// 需要密�?
 	if strings.Contains(sharePageData, "pwdload") || strings.Contains(sharePageData, "passwddiv") {
 		sharePageData, err := getJSFunctionByName(sharePageData, "down_p")
 		if err != nil {
@@ -429,8 +429,8 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 	file.ID = shareID
 	file.Time = timeFindReg.FindString(sharePageData)
 
-	// 重定向获取真实链接
-	res, err := base.NoRedirectClient.R().SetHeaders(map[string]string{
+	// 重定向获取真实链�?
+	res, err := base.NoRedirectRWithProxy(d.DriverProxyAddr).SetHeaders(map[string]string{
 		"accept-language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
 	}).Get(downloadUrl)
 	if err != nil {
@@ -459,9 +459,9 @@ func (d *LanZou) getFilesByShareUrl(shareID, pwd string, sharePageData string) (
 	return &file, nil
 }
 
-// 通过分享链接获取文件夹
+// 通过分享链接获取文件�?
 // 似乎子目录和文件不会加密
-// 参考 https://github.com/zaxtyson/LanZouCloud-API/blob/ab2e9ec715d1919bf432210fc16b91c6775fbb99/lanzou/api/core.py#L1089
+// 参�?https://github.com/zaxtyson/LanZouCloud-API/blob/ab2e9ec715d1919bf432210fc16b91c6775fbb99/lanzou/api/core.py#L1089
 func (d *LanZou) GetFolderByShareUrl(shareID, pwd string) ([]FileOrFolderByShareUrl, error) {
 	pageData, err := d.getShareUrlHtml(shareID)
 	if err != nil {
@@ -477,12 +477,12 @@ func (d *LanZou) getFolderByShareUrl(pwd string, sharePageData string) ([]FileOr
 	}
 
 	files := make([]FileOrFolderByShareUrl, 0)
-	// vip获取文件夹
+	// vip获取文件�?
 	floders := findSubFolderReg.FindAllStringSubmatch(sharePageData, -1)
 	for _, floder := range floders {
 		if len(floder) == 3 {
 			files = append(files, FileOrFolderByShareUrl{
-				// Pwd: pwd, // 子文件夹不加密
+				// Pwd: pwd, // 子文件夹不加�?
 				ID:       floder[1],
 				NameAll:  floder[2],
 				IsFloder: true,
@@ -499,7 +499,7 @@ func (d *LanZou) getFolderByShareUrl(pwd string, sharePageData string) ([]FileOr
 		if err != nil {
 			return nil, err
 		}
-		// 文件夹中的文件加密
+		// 文件夹中的文件加�?
 		for i := 0; i < len(resp.Text); i++ {
 			resp.Text[i].Pwd = pwd
 		}
@@ -512,9 +512,9 @@ func (d *LanZou) getFolderByShareUrl(pwd string, sharePageData string) ([]FileOr
 	return files, nil
 }
 
-// 通过下载头获取真实文件信息
+// 通过下载头获取真实文件信�?
 func (d *LanZou) getFileRealInfo(downURL string) (*int64, *time.Time) {
-	res, _ := base.RestyClient.R().Head(downURL)
+	res, _ := base.RWithProxy(d.DriverProxyAddr).Head(downURL)
 	if res == nil {
 		return nil, nil
 	}

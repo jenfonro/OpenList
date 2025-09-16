@@ -179,7 +179,7 @@ func nodeToObj(node *Node, path string) (model.Obj, error) {
 }
 
 func getSizeFromUrl(url string) (int64, error) {
-	res, err := base.RestyClient.R().SetDoNotParseResponse(true).Head(url)
+	res, err := base.RWithProxy(d.DriverProxyAddr).SetDoNotParseResponse(true).Head(url)
 	if err != nil {
 		return 0, err
 	}

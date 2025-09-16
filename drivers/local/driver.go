@@ -302,7 +302,7 @@ func (d *Local) Move(ctx context.Context, srcObj, dstDir model.Obj) error {
 		if err := d.Copy(ctx, srcObj, dstDir); err != nil {
 			return err
 		}
-		// 复制成功后直接删除源文件/文件夹
+		// 复制成功后直接删除源文件/文件�?
 		if srcObj.IsDir() {
 			return os.RemoveAll(srcObj.GetPath())
 		}

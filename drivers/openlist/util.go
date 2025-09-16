@@ -33,7 +33,7 @@ func (d *OpenList) login() error {
 
 func (d *OpenList) request(api, method string, callback base.ReqCallback, retry ...bool) ([]byte, int, error) {
 	url := d.Address + "/api" + api
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Authorization", d.Token)
 	if callback != nil {
 		callback(req)

@@ -36,7 +36,7 @@ func getStrBetween(raw, start, end string) string {
 
 func (d *Terabox) resetJsToken() error {
 	u := d.base_url
-	res, err := base.RestyClient.R().SetHeaders(map[string]string{
+	res, err := base.RWithProxy(d.DriverProxyAddr).SetHeaders(map[string]string{
 		"Cookie":           d.Cookie,
 		"Accept":           "application/json, text/plain, */*",
 		"Referer":          d.base_url,
@@ -56,7 +56,7 @@ func (d *Terabox) resetJsToken() error {
 }
 
 func (d *Terabox) request(rurl string, method string, callback base.ReqCallback, resp interface{}, noRetry ...bool) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Cookie":           d.Cookie,
 		"Accept":           "application/json, text/plain, */*",
@@ -240,7 +240,7 @@ func (d *Terabox) linkOfficial(file model.Obj, args model.LinkArgs) (*model.Link
 		return nil, fmt.Errorf("fid %s no dlink found, errno: %d", file.GetID(), resp.Errno)
 	}
 
-	res, err := base.NoRedirectClient.R().SetHeader("Cookie", d.Cookie).SetHeader("User-Agent", "terabox;1.37.0.7;PC;PC-Windows;10.0.22631;WindowsTeraBox").Get(resp.Dlink[0].Dlink)
+	res, err := base.NoRedirectRWithProxy(d.DriverProxyAddr).SetHeader("Cookie", d.Cookie).SetHeader("User-Agent", "terabox;1.37.0.7;PC;PC-Windows;10.0.22631;WindowsTeraBox").Get(resp.Dlink[0].Dlink)
 	if err != nil {
 		return nil, err
 	}

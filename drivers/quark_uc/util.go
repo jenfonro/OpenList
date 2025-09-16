@@ -25,7 +25,7 @@ import (
 
 func (d *QuarkOrUC) request(pathname string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	u := d.conf.api + pathname
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Cookie":  d.Cookie,
 		"Accept":  "application/json, text/plain, */*",
@@ -88,7 +88,7 @@ func (d *QuarkOrUC) GetFiles(parent string) ([]model.Obj, error) {
 		}
 		for _, file := range resp.Data.List {
 			if d.OnlyListVideoFile {
-				// 开启后 只列出视频文件和文件夹
+				// 开启后 只列出视频文件和文件�?
 				if file.IsDir() || file.Category == 1 {
 					files = append(files, &file)
 				}
@@ -229,7 +229,7 @@ x-oss-user-agent:aliyun-sdk-js/6.6.1 Chrome 98.0.4758.80 on Windows 10 64-bit
 	//	}
 	//}
 	u := fmt.Sprintf("https://%s.%s/%s", pre.Data.Bucket, pre.Data.UploadUrl[7:], pre.Data.ObjKey)
-	res, err := base.RestyClient.R().SetContext(ctx).
+	res, err := base.RWithProxy(d.DriverProxyAddr).SetContext(ctx).
 		SetHeaders(map[string]string{
 			"Authorization":    resp.Data.AuthKey,
 			"Content-Type":     mineType,
@@ -298,7 +298,7 @@ x-oss-user-agent:aliyun-sdk-js/6.6.1 Chrome 98.0.4758.80 on Windows 10 64-bit
 		return err
 	}
 	u := fmt.Sprintf("https://%s.%s/%s", pre.Data.Bucket, pre.Data.UploadUrl[7:], pre.Data.ObjKey)
-	res, err := base.RestyClient.R().
+	res, err := base.RWithProxy(d.DriverProxyAddr).
 		SetHeaders(map[string]string{
 			"Authorization":    resp.Data.AuthKey,
 			"Content-MD5":      contentMd5,

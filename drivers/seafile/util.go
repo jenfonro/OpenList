@@ -20,7 +20,7 @@ func (d *Seafile) getToken() error {
 		return nil
 	}
 	var authResp AuthTokenResp
-	res, err := base.RestyClient.R().
+	res, err := base.RWithProxy(d.DriverProxyAddr).
 		SetResult(&authResp).
 		SetFormData(map[string]string{
 			"username": d.UserName,
@@ -42,9 +42,9 @@ func (d *Seafile) request(method string, pathname string, callback base.ReqCallb
 	if !strings.HasPrefix(pathname, "http") {
 		full = d.Address + pathname
 	}
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	if len(noRedirect) > 0 && noRedirect[0] {
-		req = base.NoRedirectClient.R()
+		req = base.NoRedirectRWithProxy(d.DriverProxyAddr)
 	}
 	req.SetHeader("Authorization", d.authorization)
 	callback(req)

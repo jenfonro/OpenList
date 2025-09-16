@@ -13,8 +13,8 @@ func SignURL(originURL, privateKey string, uid uint64, validDuration time.Durati
 		return originURL, nil
 	}
 	var (
-		ts     = time.Now().Add(validDuration).Unix() // 有效时间戳
-		rInt   = rand.Int()                           // 随机正整数
+		ts     = time.Now().Add(validDuration).Unix() // 有效时间�?
+		rInt   = rand.Int()                           // 随机正整�?
 		objURL *url.URL
 	)
 	objURL, err = url.Parse(originURL)

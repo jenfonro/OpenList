@@ -67,7 +67,7 @@ func (d *ILanZou) request(pathname, method string, callback base.ReqCallback, pr
 
 	queryString := strings.Join(params, "&")
 
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Origin":          d.conf.site,
 		"Referer":         d.conf.site + "/",

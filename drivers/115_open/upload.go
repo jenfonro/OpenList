@@ -21,15 +21,15 @@ func calPartSize(fileSize int64) int64 {
 		if fileSize > 1*utils.TB { // file Size over 1TB
 			partSize = 5 * utils.GB // file part size 5GB
 		} else if fileSize > 768*utils.GB { // over 768GB
-			partSize = 109951163 // â‰ˆ 104.8576MB, split 1TB into 10,000 part
+			partSize = 109951163 // â‰?104.8576MB, split 1TB into 10,000 part
 		} else if fileSize > 512*utils.GB { // over 512GB
-			partSize = 82463373 // â‰ˆ 78.6432MB
+			partSize = 82463373 // â‰?78.6432MB
 		} else if fileSize > 384*utils.GB { // over 384GB
-			partSize = 54975582 // â‰ˆ 52.4288MB
+			partSize = 54975582 // â‰?52.4288MB
 		} else if fileSize > 256*utils.GB { // over 256GB
-			partSize = 41231687 // â‰ˆ 39.3216MB
+			partSize = 41231687 // â‰?39.3216MB
 		} else if fileSize > 128*utils.GB { // over 128GB
-			partSize = 27487791 // â‰ˆ 26.2144MB
+			partSize = 27487791 // â‰?26.2144MB
 		}
 	}
 	return partSize

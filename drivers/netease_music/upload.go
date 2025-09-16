@@ -76,7 +76,7 @@ func (u *uploader) init(stream model.FileStreamer) error {
 		u.meta.album = "未知专辑"
 	}
 	if u.meta.artist == "" {
-		u.meta.artist = "未知艺术家"
+		u.meta.artist = "未知艺术�?
 	}
 	_, err = u.file.Seek(0, io.SeekStart)
 	if err != nil {

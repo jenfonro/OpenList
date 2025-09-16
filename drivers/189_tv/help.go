@@ -45,12 +45,12 @@ func AppKeySignatureOfHmac(sessionSecret, appKey, operate, fullUrl string, times
 	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
-// 获取http规范的时间
+// 获取http规范的时�?
 func getHttpDateStr() string {
 	return time.Now().UTC().Format(http.TimeFormat)
 }
 
-// 时间戳
+// 时间�?
 func timestamp() int64 {
 	return time.Now().UTC().UnixNano() / 1e6
 }

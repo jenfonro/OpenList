@@ -17,7 +17,7 @@ import (
 )
 
 func (d *NeteaseMusic) request(url, method string, opt ReqOption) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 
 	req.SetHeader("Cookie", d.Addition.Cookie)
 

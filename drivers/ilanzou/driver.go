@@ -149,7 +149,7 @@ func (d *ILanZou) Link(ctx context.Context, file model.Obj, args model.LinkArgs)
 	u.RawQuery = strings.Join(params, "&")
 	realURL := u.String()
 	// get the url after redirect
-	req := base.NoRedirectClient.R()
+	req := base.NoRedirectRWithProxy(d.DriverProxyAddr)
 
 	req.SetHeaders(map[string]string{
 		"Referer":    d.conf.site + "/",

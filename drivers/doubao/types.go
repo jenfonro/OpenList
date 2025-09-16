@@ -27,7 +27,7 @@ type File struct {
 	ID                  string `json:"id"`
 	Name                string `json:"name"`
 	Key                 string `json:"key"`
-	NodeType            int    `json:"node_type"` // 0: 文件, 1: 文件夹
+	NodeType            int    `json:"node_type"` // 0: 文件, 1: 文件�?
 	Size                int64  `json:"size"`
 	Source              int    `json:"source"`
 	NameReviewStatus    int    `json:"name_review_status"`
@@ -103,7 +103,7 @@ type UploadNodeResp struct {
 			ParentID string `json:"parent_id"`
 			Name     string `json:"name"`
 			Key      string `json:"key"`
-			NodeType int    `json:"node_type"` // 0: 文件, 1: 文件夹
+			NodeType int    `json:"node_type"` // 0: 文件, 1: 文件�?
 		} `json:"node_list"`
 	} `json:"data"`
 }
@@ -328,7 +328,7 @@ type UploadPart struct {
 	Mode       string `json:"mode,omitempty"`
 }
 
-// UploadResp 上传响应体
+// UploadResp 上传响应�?
 type UploadResp struct {
 	Code       int        `json:"code"`
 	ApiVersion string     `json:"apiversion"`
@@ -401,7 +401,7 @@ func (r *CommonResp) GetError() error {
 	return fmt.Errorf("[doubao] API error (code: %d): %s", r.Code, errMsg)
 }
 
-// UnmarshalData 将data字段解析为指定类型
+// UnmarshalData 将data字段解析为指定类�?
 func (r *CommonResp) UnmarshalData(v interface{}) error {
 	if !r.IsSuccess() {
 		return r.GetError()

@@ -33,7 +33,7 @@ const (
 func (d *QuarkUCTV) request(ctx context.Context, pathname string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	u := d.conf.api + pathname
 	tm, token, reqID := d.generateReqSign(method, pathname, d.conf.signKey)
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetContext(ctx)
 	req.SetHeaders(map[string]string{
 		"Accept":          "application/json, text/plain, */*",
@@ -69,7 +69,7 @@ func (d *QuarkUCTV) request(ctx context.Context, pathname string, method string,
 	if err != nil {
 		return nil, err
 	}
-	// 判断 是否需要 刷新 access_token
+	// 判断 是否需�?刷新 access_token
 	if e.Status == -1 && e.Errno == 10001 {
 		// token 过期
 		err = d.getRefreshTokenByTV(ctx, d.Addition.RefreshToken, true)
@@ -88,7 +88,7 @@ func (d *QuarkUCTV) request(ctx context.Context, pathname string, method string,
 }
 
 func (d *QuarkUCTV) getLoginCode(ctx context.Context) (string, error) {
-	// 获取登录二维码
+	// 获取登录二维�?
 	pathname := "/oauth/authorize"
 	var resp struct {
 		CommonRsp
@@ -161,7 +161,7 @@ func (d *QuarkUCTV) getRefreshTokenByTV(ctx context.Context, code string, isRefr
 		body["code"] = code
 	}
 
-	_, err := base.RestyClient.R().
+	_, err := base.RWithProxy(d.DriverProxyAddr).
 		SetHeader("Content-Type", "application/json").
 		SetBody(body).
 		SetResult(&resp).

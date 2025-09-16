@@ -37,7 +37,7 @@ func (d *AliyundriveOpen) _refreshToken(ctx context.Context) (string, string, er
 		if err != nil {
 			return "", "", err
 		}
-		_, err = base.RestyClient.R().
+		_, err = base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
@@ -57,7 +57,7 @@ func (d *AliyundriveOpen) _refreshToken(ctx context.Context) (string, string, er
 		}
 		return resp.RefreshToken, resp.AccessToken, nil
 	}
-	// 本地刷新逻辑，必须要求 client_id 和 client_secret
+	// 本地刷新逻辑，必须要�?client_id �?client_secret
 	if d.ClientID == "" || d.ClientSecret == "" {
 		return "", "", fmt.Errorf("empty ClientID or ClientSecret")
 	}
@@ -68,7 +68,7 @@ func (d *AliyundriveOpen) _refreshToken(ctx context.Context) (string, string, er
 	url := API_URL + "/oauth/access_token"
 	//var resp base.TokenResp
 	var e ErrResp
-	res, err := base.RestyClient.R().
+	res, err := base.RWithProxy(d.DriverProxyAddr).
 		//ForceContentType("application/json").
 		SetBody(base.Json{
 			"client_id":     d.ClientID,
@@ -144,7 +144,7 @@ func (d *AliyundriveOpen) request(ctx context.Context, limitTy limiterType, uri,
 }
 
 func (d *AliyundriveOpen) requestReturnErrResp(ctx context.Context, limitTy limiterType, uri, method string, callback base.ReqCallback, retry ...bool) ([]byte, error, *ErrResp) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	// TODO check whether access_token is expired
 	req.SetHeader("Authorization", "Bearer "+d.getAccessToken())
 	if method == http.MethodPost {

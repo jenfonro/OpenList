@@ -10,9 +10,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// 发送 GET 请求
+// 发�?GET 请求
 func (d *GithubReleases) GetRequest(url string) (*resty.Response, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Accept", "application/vnd.github+json")
 	req.SetHeader("X-GitHub-Api-Version", "2022-11-28")
 	if d.Addition.Token != "" {
@@ -60,7 +60,7 @@ func (d *GithubReleases) ParseRepos(text string) ([]MountPoint, error) {
 	return points, nil
 }
 
-// 获取下一级目录
+// 获取下一级目�?
 func GetNextDir(wholePath string, basePath string) string {
 	basePath = fmt.Sprintf("%s/", strings.TrimRight(basePath, "/"))
 	if !strings.HasPrefix(wholePath, basePath) {

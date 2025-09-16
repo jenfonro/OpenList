@@ -61,7 +61,7 @@ const (
 	ImgDataType      = "image"
 	VideoDataType    = "video"
 	DefaultChunkSize = int64(5 * 1024 * 1024) // 5MB
-	MaxRetryAttempts = 3                      // 最大重试次数
+	MaxRetryAttempts = 3                      // 最大重试次�?
 	UserAgent        = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
 	Region           = "cn-north-1"
 	UploadTimeout    = 3 * time.Minute
@@ -70,7 +70,7 @@ const (
 // do others that not defined in Driver interface
 func (d *Doubao) request(path string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	reqUrl := BaseURL + path
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Cookie", d.Cookie)
 	if callback != nil {
 		callback(req)
@@ -89,7 +89,7 @@ func (d *Doubao) request(path string, method string, callback base.ReqCallback, 
 	if err = json.Unmarshal(body, &commonResp); err != nil {
 		return nil, err
 	}
-	// 检查响应是否成功
+	// 检查响应是否成�?
 	if !commonResp.IsSuccess() {
 		return body, commonResp.GetError()
 	}
@@ -129,7 +129,7 @@ func (d *Doubao) getFiles(dirId, cursor string) (resp []File, err error) {
 	}
 
 	if r.Data.NextCursor != "-1" {
-		// 递归获取下一页
+		// 递归获取下一�?
 		nextFiles, err := d.getFiles(dirId, r.Data.NextCursor)
 		if err != nil {
 			return nil, err
@@ -207,7 +207,7 @@ func (d *Doubao) signRequest(req *resty.Request, method, tokenType, uploadUrl st
 
 	// 查询参数按照字母顺序排序
 	canonicalQueryString := getCanonicalQueryString(req.QueryParam)
-	// 规范请求头
+	// 规范请求�?
 	canonicalHeaders, signedHeaders := getCanonicalHeadersFromMap(req.Header)
 	canonicalRequest := method + "\n" +
 		canonicalURI + "\n" +
@@ -227,7 +227,7 @@ func (d *Doubao) signRequest(req *resty.Request, method, tokenType, uploadUrl st
 	signingKey := getSigningKey(secretAccessKey, dateStamp, Region, serviceName)
 	// 计算签名
 	signature := hmacSHA256Hex(signingKey, stringToSign)
-	// 构建授权头
+	// 构建授权�?
 	authorizationHeader := fmt.Sprintf(
 		"%s Credential=%s/%s, SignedHeaders=%s, Signature=%s",
 		algorithm,
@@ -243,7 +243,7 @@ func (d *Doubao) signRequest(req *resty.Request, method, tokenType, uploadUrl st
 }
 
 func (d *Doubao) requestApi(url, method, tokenType string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"user-agent": UserAgent,
 	})
@@ -330,10 +330,10 @@ func (d *Doubao) getUploadConfig(upConfig *UploadConfig, dataType string, file m
 	configureParams := func() (string, map[string]string) {
 		var uploadUrl string
 		var params map[string]string
-		// 根据数据类型设置不同的上传参数
+		// 根据数据类型设置不同的上传参�?
 		switch dataType {
 		case VideoDataType:
-			// 音频/视频类型 - 使用uploadToken.Samantha的配置
+			// 音频/视频类型 - 使用uploadToken.Samantha的配�?
 			uploadUrl = d.UploadToken.Samantha.UploadInfo.VideoHost
 			params = map[string]string{
 				"Action":       "ApplyUploadInner",
@@ -346,7 +346,7 @@ func (d *Doubao) getUploadConfig(upConfig *UploadConfig, dataType string, file m
 				"s":            randomString(),
 			}
 		case ImgDataType, FileDataType:
-			// 图片或其他文件类型 - 使用uploadToken.Alice对应配置
+			// 图片或其他文件类�?- 使用uploadToken.Alice对应配置
 			uploadUrl = "https://" + d.UploadToken.Alice[dataType].UploadHost
 			params = map[string]string{
 				"Action":        "ApplyImageUpload",
@@ -447,7 +447,7 @@ func (d *Doubao) uploadNode(uploadConfig *UploadConfig, dir model.Obj, file mode
 	return r, err
 }
 
-// Upload 普通上传实现
+// Upload 普通上传实�?
 func (d *Doubao) Upload(ctx context.Context, config *UploadConfig, dstDir model.Obj, file model.FileStreamer, up driver.UpdateProgress, dataType string) (model.Obj, error) {
 	ss, err := stream.NewStreamSectionReader(file, int(file.GetSize()), &up)
 	if err != nil {
@@ -528,7 +528,7 @@ func (d *Doubao) UploadByMultipart(ctx context.Context, config *UploadConfig, fi
 	uploadNode := config.InnerUploadAddress.UploadNodes[0]
 	storeInfo := uploadNode.StoreInfos[0]
 	uploadUrl := fmt.Sprintf("https://%s/upload/v1/%s", uploadNode.UploadHost, storeInfo.StoreURI)
-	// 初始化分片上传
+	// 初始化分片上�?
 	var uploadID string
 	err := d._retryOperation("Initialize multipart upload", func() error {
 		var err error
@@ -549,7 +549,7 @@ func (d *Doubao) UploadByMultipart(ctx context.Context, config *UploadConfig, fi
 	}
 
 	totalParts := (fileSize + chunkSize - 1) / chunkSize
-	// 创建分片信息组
+	// 创建分片信息�?
 	parts := make([]UploadPart, totalParts)
 
 	up(10.0) // 更新进度
@@ -563,15 +563,15 @@ func (d *Doubao) UploadByMultipart(ctx context.Context, config *UploadConfig, fi
 	)
 
 	var partsMutex sync.Mutex
-	// 并行上传所有分片
+	// 并行上传所有分�?
 	hash := crc32.NewIEEE()
 	for partIndex := range totalParts {
 		if utils.IsCanceled(uploadCtx) {
 			break
 		}
-		partNumber := partIndex + 1 // 分片编号从1开始
+		partNumber := partIndex + 1 // 分片编号�?开�?
 
-		// 计算此分片的大小和偏移
+		// 计算此分片的大小和偏�?
 		offset := partIndex * chunkSize
 		size := chunkSize
 		if partIndex == totalParts-1 {
@@ -628,7 +628,7 @@ func (d *Doubao) UploadByMultipart(ctx context.Context, config *UploadConfig, fi
 				} else if uploadResp.Data.Crc32 != crc32Value {
 					return fmt.Errorf("upload part failed: crc32 mismatch, expected %s, got %s", crc32Value, uploadResp.Data.Crc32)
 				}
-				// 记录成功上传的分片
+				// 记录成功上传的分�?
 				partsMutex.Lock()
 				parts[partIndex] = UploadPart{
 					PartNumber: strconv.FormatInt(partNumber, 10),
@@ -663,7 +663,7 @@ func (d *Doubao) UploadByMultipart(ctx context.Context, config *UploadConfig, fi
 		return nil, fmt.Errorf("failed to commit upload: %w", err)
 	}
 
-	up(98.0) // 更新到98%
+	up(98.0) // 更新�?8%
 	// 上传节点信息
 	var uploadNodeResp UploadNodeResp
 
@@ -724,7 +724,7 @@ func (d *Doubao) uploadRequest(uploadUrl string, method string, storeInfo StoreI
 	return res.Body(), nil
 }
 
-// 初始化分片上传
+// 初始化分片上�?
 func (d *Doubao) initMultipartUpload(config *UploadConfig, uploadUrl string, storeInfo StoreInfo) (uploadId string, err error) {
 	uploadResp := UploadResp{}
 
@@ -767,7 +767,7 @@ func (d *Doubao) completeMultipartUpload(config *UploadConfig, uploadUrl, upload
 		if err != nil {
 			return err
 		}
-		// 检查响应状态码 2000 成功 4024 分片合并中
+		// 检查响应状态码 2000 成功 4024 分片合并�?
 		if uploadResp.Code != 2000 && uploadResp.Code != 4024 {
 			return fmt.Errorf("finish upload failed: %s", uploadResp.Message)
 		}
@@ -828,7 +828,7 @@ func (d *Doubao) _retryOperation(operation string, fn func() error) error {
 	)
 }
 
-// _convertUploadParts 将分片信息转换为字符串
+// _convertUploadParts 将分片信息转换为字符�?
 func _convertUploadParts(parts []UploadPart) string {
 	if len(parts) == 0 {
 		return ""
@@ -846,7 +846,7 @@ func _convertUploadParts(parts []UploadPart) string {
 	return result.String()
 }
 
-// 获取规范查询字符串
+// 获取规范查询字符�?
 func getCanonicalQueryString(query url.Values) string {
 	if len(query) == 0 {
 		return ""
@@ -877,7 +877,7 @@ func urlEncode(s string) string {
 
 // 获取规范头信息和已签名头列表
 func getCanonicalHeadersFromMap(headers map[string][]string) (string, string) {
-	// 不可签名的头部列表
+	// 不可签名的头部列�?
 	unsignableHeaders := map[string]bool{
 		"authorization":     true,
 		"content-type":      true,

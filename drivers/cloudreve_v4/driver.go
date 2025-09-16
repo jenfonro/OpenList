@@ -305,7 +305,7 @@ func (d *CloudreveV4) Put(ctx context.Context, dstDir model.Obj, file model.File
 		}
 	}
 	if err != nil {
-		// 删除失败的会话
+		// 删除失败的会�?
 		_ = d.request(http.MethodDelete, "/file/upload", func(req *resty.Request) {
 			req.SetBody(base.Json{
 				"id":  u.SessionID,

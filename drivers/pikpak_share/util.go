@@ -78,7 +78,7 @@ const (
 )
 
 func (d *PikPakShare) request(url string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"User-Agent":      d.GetUserAgent(),
 		"X-Client-ID":     d.GetClientID(),
@@ -179,7 +179,7 @@ func GetAction(method string, url string) string {
 type Common struct {
 	client       *resty.Client
 	CaptchaToken string
-	// 必要值,签名相关
+	// 必要�?签名相关
 	ClientID      string
 	ClientSecret  string
 	ClientVersion string
@@ -284,7 +284,7 @@ func (d *PikPakShare) RefreshCaptchaToken(action, userID string) error {
 	return d.refreshCaptchaToken(action, metas)
 }
 
-// GetCaptchaSign 获取验证码签名
+// GetCaptchaSign 获取验证码签�?
 func (c *Common) GetCaptchaSign() (timestamp, sign string) {
 	timestamp = fmt.Sprint(time.Now().UnixMilli())
 	str := fmt.Sprint(c.ClientID, c.ClientVersion, c.PackageName, c.DeviceID, timestamp)

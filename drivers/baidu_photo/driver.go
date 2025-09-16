@@ -204,7 +204,7 @@ func (d *BaiduPhoto) Move(ctx context.Context, srcObj, dstDir model.Obj) (model.
 			if err != nil {
 				return nil, err
 			}
-			// 删除原相册文件
+			// 删除原相册文�?
 			_ = d.DeleteAlbumFile(ctx, file)
 			return newObj, nil
 		}
@@ -213,7 +213,7 @@ func (d *BaiduPhoto) Move(ctx context.Context, srcObj, dstDir model.Obj) (model.
 }
 
 func (d *BaiduPhoto) Rename(ctx context.Context, srcObj model.Obj, newName string) (model.Obj, error) {
-	// 仅支持相册改名
+	// 仅支持相册改�?
 	if album, ok := srcObj.(*Album); ok {
 		return d.SetAlbumName(ctx, album, newName)
 	}
@@ -233,7 +233,7 @@ func (d *BaiduPhoto) Remove(ctx context.Context, obj model.Obj) error {
 }
 
 func (d *BaiduPhoto) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) (model.Obj, error) {
-	// 不支持大小为0的文件
+	// 不支持大小为0的文�?
 	if stream.GetSize() == 0 {
 		return nil, fmt.Errorf("file size cannot be zero")
 	}
@@ -311,7 +311,7 @@ func (d *BaiduPhoto) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 	sliceMd5 := hex.EncodeToString(sliceMd5H2.Sum(nil))
 	blockListStr, _ := utils.Json.MarshalToString(sliceMD5List)
 
-	// step.2 预上传
+	// step.2 预上�?
 	params := map[string]string{
 		"autoinit":    "1",
 		"isdir":       "0",
@@ -324,7 +324,7 @@ func (d *BaiduPhoto) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 		"block_list":  blockListStr,
 	}
 
-	// 尝试获取之前的进度
+	// 尝试获取之前的进�?
 	precreateResp, ok := base.GetUploadProgress[*PrecreateResp](d, strconv.FormatInt(d.Uk, 10), contentMd5)
 	if !ok {
 		_, err = d.Post(FILE_API_URL_V1+"/precreate", func(r *resty.Request) {
@@ -395,7 +395,7 @@ func (d *BaiduPhoto) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 			return nil, err
 		}
 		fallthrough
-	case 3: //step.5 增加到相册
+	case 3: //step.5 增加到相�?
 		rootfile := precreateResp.Data.toFile()
 		if album, ok := dstDir.(*Album); ok {
 			return d.AddAlbumFile(ctx, album, rootfile)

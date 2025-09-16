@@ -29,7 +29,7 @@ func (d *FebBox) GetAddition() driver.Additional {
 }
 
 func (d *FebBox) Init(ctx context.Context) error {
-	// 初始化 oauth2Config
+	// 初始�?oauth2Config
 	oauth2Config := &clientcredentials.Config{
 		ClientID:     d.ClientID,
 		ClientSecret: d.ClientSecret,

@@ -26,7 +26,7 @@ var _ model.Obj = (*FileOrFolderByShareUrl)(nil)
 
 type FileOrFolder struct {
 	Name string `json:"name"`
-	//Onof        string `json:"onof"` // 是否存在提取码
+	//Onof        string `json:"onof"` // 是否存在提取�?
 	//IsLock      string `json:"is_lock"`
 	//IsCopyright int    `json:"is_copyright"`
 
@@ -43,7 +43,7 @@ type FileOrFolder struct {
 	//IsDes         int    `json:"is_des"` // 是否存在描述
 	//IsIco         int    `json:"is_ico"`
 
-	// 文件夹
+	// 文件�?
 	FolID string `json:"fol_id"`
 	//Folderlock string `json:"folderlock"`
 	//FolderDes  string `json:"folder_des"`
@@ -99,7 +99,7 @@ func (f *FileOrFolder) GetShareInfo() *FileShare {
 	return f.shareInfo
 }
 
-/* 通过ID获取文件/文件夹分享信息 */
+/* 通过ID获取文件/文件夹分享信�?*/
 type FileShare struct {
 	Pwd    string `json:"pwd"`
 	Onof   string `json:"onof"`
@@ -109,7 +109,7 @@ type FileShare struct {
 	// 文件
 	FID string `json:"f_id"`
 
-	// 文件夹
+	// 文件�?
 	NewUrl string `json:"new_url"`
 	Name   string `json:"name"`
 	Des    string `json:"des"`
@@ -131,7 +131,7 @@ type FileOrFolderByShareUrl struct {
 	//PIco int `json:"p_ico"`
 	//T int `json:"t"`
 
-	// 文件夹特有
+	// 文件夹特�?
 	IsFloder bool `json:"-"`
 
 	//
@@ -171,7 +171,7 @@ func (f *FileOrFolderByShareUrl) ModTime() time.Time {
 	return *f.time
 }
 
-// 获取下载链接的响应
+// 获取下载链接的响�?
 type FileShareInfoAndUrlResp[T string | int] struct {
 	Dom string `json:"dom"`
 	URL string `json:"url"`

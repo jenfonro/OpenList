@@ -67,7 +67,7 @@ func (d *OnedriveAPP) _accessToken() error {
 	url := d.GetMetaUrl(true, "") + "/" + d.TenantID + "/oauth2/token"
 	var resp base.TokenResp
 	var e TokenErr
-	_, err := base.RestyClient.R().SetResult(&resp).SetError(&e).SetFormData(map[string]string{
+	_, err := base.RWithProxy(d.DriverProxyAddr).SetResult(&resp).SetError(&e).SetFormData(map[string]string{
 		"grant_type":    "client_credentials",
 		"client_id":     d.ClientID,
 		"client_secret": d.ClientSecret,
@@ -89,7 +89,7 @@ func (d *OnedriveAPP) _accessToken() error {
 }
 
 func (d *OnedriveAPP) Request(url string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Authorization", "Bearer "+d.AccessToken)
 	if callback != nil {
 		callback(req)

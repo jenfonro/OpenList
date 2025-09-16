@@ -17,6 +17,7 @@ type Storage struct {
 	Disabled        bool      `json:"disabled"` // if disabled
 	DisableIndex    bool      `json:"disable_index"`
 	EnableSign      bool      `json:"enable_sign"`
+	DriverProxyAddr string    `json:"driver_proxy_addr"` // 驱动代理服务器地址
 	Sort
 	Proxy
 }

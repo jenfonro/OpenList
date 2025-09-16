@@ -97,7 +97,7 @@ func (d *Pan123) Link(ctx context.Context, file model.Obj, args model.LinkArgs) 
 		}
 
 		log.Debug("download url: ", u_)
-		res, err := base.NoRedirectClient.R().SetHeader("Referer", "https://www.123pan.com/").Get(u_)
+		res, err := base.NoRedirectRWithProxy(d.DriverProxyAddr).SetHeader("Referer", "https://www.123pan.com/").Get(u_)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +189,7 @@ func (d *Pan123) Put(ctx context.Context, dstDir model.Obj, file model.FileStrea
 	}
 	data := base.Json{
 		"driveId":      0,
-		"duplicate":    2, // 2->覆盖 1->重命名 0->默认
+		"duplicate":    2, // 2->覆盖 1->重命�?0->默认
 		"etag":         strings.ToLower(etag),
 		"fileName":     file.GetName(),
 		"parentFileId": dstDir.GetID(),

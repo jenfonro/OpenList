@@ -167,7 +167,7 @@ func (d *ChaoXing) Rename(ctx context.Context, srcObj model.Obj, newName string)
 		// 	"recIds":   strings.Split(srcObj.GetID(), "$")[0],
 		// 	"name":     newName,
 		// }
-		return errors.New("此网盘不支持修改文件名")
+		return errors.New("此网盘不支持修改文件�?)
 	}
 	var resp ListFileResp
 	_, err := d.request(path, http.MethodGet, func(req *resty.Request) {

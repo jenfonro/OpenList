@@ -22,7 +22,7 @@ func (d *YandexDisk) refreshToken() error {
 			AccessToken  string `json:"access_token"`
 			ErrorMessage string `json:"text"`
 		}
-		_, err := base.RestyClient.R().
+		_, err := base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
@@ -45,7 +45,7 @@ func (d *YandexDisk) refreshToken() error {
 		op.MustSaveDriverStorage(d)
 		return nil
 	}
-	// 使用本地客户端的情况下检查是否为空
+	// 使用本地客户端的情况下检查是否为�?
 	if d.ClientID == "" || d.ClientSecret == "" {
 		return fmt.Errorf("empty ClientID or ClientSecret")
 	}
@@ -53,7 +53,7 @@ func (d *YandexDisk) refreshToken() error {
 	u := "https://oauth.yandex.com/token"
 	var resp base.TokenResp
 	var e TokenErrResp
-	_, err := base.RestyClient.R().SetResult(&resp).SetError(&e).SetFormData(map[string]string{
+	_, err := base.RWithProxy(d.DriverProxyAddr).SetResult(&resp).SetError(&e).SetFormData(map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": d.RefreshToken,
 		"client_id":     d.ClientID,
@@ -72,7 +72,7 @@ func (d *YandexDisk) refreshToken() error {
 
 func (d *YandexDisk) request(pathname string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	u := "https://cloud-api.yandex.net/v1/disk/resources" + pathname
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Authorization", "OAuth "+d.AccessToken)
 	if callback != nil {
 		callback(req)

@@ -39,7 +39,7 @@ func (d *BaiduNetdisk) _refreshToken() error {
 			AccessToken  string `json:"access_token"`
 			ErrorMessage string `json:"text"`
 		}
-		_, err := base.RestyClient.R().
+		_, err := base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
@@ -62,7 +62,7 @@ func (d *BaiduNetdisk) _refreshToken() error {
 		op.MustSaveDriverStorage(d)
 		return nil
 	}
-	// 使用本地客户端的情况下检查是否为空
+	// 使用本地客户端的情况下检查是否为�?
 	if d.ClientID == "" || d.ClientSecret == "" {
 		return fmt.Errorf("empty ClientID or ClientSecret")
 	}
@@ -70,7 +70,7 @@ func (d *BaiduNetdisk) _refreshToken() error {
 	u := "https://openapi.baidu.com/oauth/2.0/token"
 	var resp base.TokenResp
 	var e TokenErrResp
-	_, err := base.RestyClient.R().
+	_, err := base.RWithProxy(d.DriverProxyAddr).
 		SetResult(&resp).
 		SetError(&e).
 		SetQueryParams(map[string]string{
@@ -97,7 +97,7 @@ func (d *BaiduNetdisk) _refreshToken() error {
 func (d *BaiduNetdisk) request(furl string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	var result []byte
 	err := retry.Do(func() error {
-		req := base.RestyClient.R()
+		req := base.RWithProxy(d.DriverProxyAddr)
 		req.SetQueryParam("access_token", d.AccessToken)
 		if callback != nil {
 			callback(req)
@@ -203,7 +203,7 @@ func (d *BaiduNetdisk) linkOfficial(file model.Obj, _ model.LinkArgs) (*model.Li
 		return nil, err
 	}
 	u := fmt.Sprintf("%s&access_token=%s", resp.List[0].Dlink, d.AccessToken)
-	res, err := base.NoRedirectClient.R().SetHeader("User-Agent", "pan.baidu.com").Head(u)
+	res, err := base.NoRedirectRWithProxy(d.DriverProxyAddr).SetHeader("User-Agent", "pan.baidu.com").Head(u)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +316,7 @@ const (
 	VipSliceSize     int64 = 16 * utils.MB
 	SVipSliceSize    int64 = 32 * utils.MB
 
-	MaxSliceNum       = 2048 // 文档写的是 1024/没写 ，但实际测试是 2048
+	MaxSliceNum       = 2048 // 文档写的�?1024/没写 ，但实际测试�?2048
 	SliceStep   int64 = 1 * utils.MB
 )
 

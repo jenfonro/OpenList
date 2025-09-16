@@ -53,17 +53,17 @@ func (y *Cloud189PC) GetAddition() driver.Additional {
 func (y *Cloud189PC) Init(ctx context.Context) (err error) {
 	y.storageConfig = config
 	if y.isFamily() {
-		// 兼容旧上传接口
+		// 兼容旧上传接�?
 		if y.Addition.RapidUpload || y.Addition.UploadMethod == "old" {
 			y.storageConfig.NoOverwriteUpload = true
 		}
 	} else {
-		// 家庭云转存，不支持覆盖上传
+		// 家庭云转存，不支持覆盖上�?
 		if y.Addition.FamilyTransfer {
 			y.storageConfig.NoOverwriteUpload = true
 		}
 	}
-	// 处理个人云和家庭云参数
+	// 处理个人云和家庭云参�?
 	if y.isFamily() && y.RootFolderID == "-11" {
 		y.RootFolderID = ""
 	}
@@ -71,7 +71,7 @@ func (y *Cloud189PC) Init(ctx context.Context) (err error) {
 		y.RootFolderID = "-11"
 	}
 
-	// 限制上传线程数
+	// 限制上传线程�?
 	y.uploadThread, _ = strconv.Atoi(y.UploadThread)
 	if y.uploadThread < 1 || y.uploadThread > 32 {
 		y.uploadThread, y.UploadThread = 3, "3"
@@ -86,7 +86,7 @@ func (y *Cloud189PC) Init(ctx context.Context) (err error) {
 			})
 		}
 
-		// 先尝试用Token刷新，之后尝试登陆
+		// 先尝试用Token刷新，之后尝试登�?
 		if y.Addition.RefreshToken != "" {
 			y.tokenInfo = &AppSessionResp{RefreshToken: y.Addition.RefreshToken}
 			if err = y.refreshToken(); err != nil {
@@ -100,7 +100,7 @@ func (y *Cloud189PC) Init(ctx context.Context) (err error) {
 
 		// 初始化并启动 cron 任务
 		y.cron = cron.NewCron(time.Duration(time.Minute * 5))
-		// 每5分钟执行一次 keepAlive
+		// �?分钟执行一�?keepAlive
 		y.cron.Do(y.keepAlive)
 	}
 
@@ -111,7 +111,7 @@ func (y *Cloud189PC) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	// 创建中转文件夹
+	// 创建中转文件�?
 	if y.FamilyTransfer {
 		if err := y.createFamilyTransferFolder(); err != nil {
 			return err
@@ -179,9 +179,9 @@ func (y *Cloud189PC) Link(ctx context.Context, file model.Obj, args model.LinkAr
 		return nil, err
 	}
 
-	// 重定向获取真实链接
+	// 重定向获取真实链�?
 	downloadUrl.URL = strings.Replace(strings.ReplaceAll(downloadUrl.URL, "&amp;", "&"), "http://", "https://", 1)
-	res, err := base.NoRedirectClient.R().SetContext(ctx).SetDoNotParseResponse(true).Get(downloadUrl.URL)
+	res, err := base.NoRedirectRWithProxy(d.DriverProxyAddr).SetContext(ctx).SetDoNotParseResponse(true).Get(downloadUrl.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (y *Cloud189PC) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 	overwrite := true
 	isFamily := y.isFamily()
 
-	// 响应时间长,按需启用
+	// 响应时间�?按需启用
 	if y.Addition.RapidUpload && !stream.IsForceStreamUpload() {
 		if newObj, err := y.RapidUpload(ctx, dstDir, stream, isFamily, overwrite); err == nil {
 			return newObj, nil
@@ -343,31 +343,31 @@ func (y *Cloud189PC) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 		uploadMethod = "stream"
 	}
 
-	// 旧版上传家庭云也有限制
+	// 旧版上传家庭云也有限�?
 	if uploadMethod == "old" {
 		return y.OldUpload(ctx, dstDir, stream, up, isFamily, overwrite)
 	}
 
 	// 开启家庭云转存
 	if !isFamily && y.FamilyTransfer {
-		// 修改上传目标为家庭云文件夹
+		// 修改上传目标为家庭云文件�?
 		transferDstDir := dstDir
 		dstDir = y.familyTransferFolder
 
-		// 使用临时文件名
+		// 使用临时文件�?
 		srcName := stream.GetName()
 		stream = &WrapFileStreamer{
 			FileStreamer: stream,
 			Name:         fmt.Sprintf("0%s.transfer", uuid.NewString()),
 		}
 
-		// 使用家庭云上传
+		// 使用家庭云上�?
 		isFamily = true
 		overwrite = false
 
 		defer func() {
 			if newObj != nil {
-				// 转存家庭云文件到个人云
+				// 转存家庭云文件到个人�?
 				err = y.SaveFamilyFileToPersonCloud(context.TODO(), y.FamilyID, newObj, transferDstDir, true)
 				// 删除家庭云源文件
 				go y.Delete(context.TODO(), y.FamilyID, newObj)
@@ -388,7 +388,7 @@ func (y *Cloud189PC) Put(ctx context.Context, dstDir model.Obj, stream model.Fil
 					return
 				}
 
-				// 重命名转存文件
+				// 重命名转存文�?
 				newObj, err = y.Rename(context.TODO(), file, srcName)
 				if err != nil {
 					// 重命名失败删除源文件

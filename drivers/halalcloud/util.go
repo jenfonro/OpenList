@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	pbPublicUser "github.com/city404/v6-public-rpc-proto/go/v6/user"
@@ -224,9 +225,8 @@ func getRawFiles(addr *pubUserFile.SliceDownloadInfo) ([]byte, error) {
 		return nil, errors.New("addr is nil")
 	}
 
-	client := http.Client{
-		Timeout: time.Duration(60 * time.Second), // Set timeout to 5 seconds
-	}
+	client := *base.HttpClient
+	client.Timeout = time.Duration(60 * time.Second) // Set timeout to 60 seconds
 	resp, err := client.Get(addr.DownloadAddress)
 	if err != nil {
 

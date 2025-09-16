@@ -52,7 +52,7 @@ func (d *QuarkUCTV) Init(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			// 展示二维码
+			// 展示二维�?
 			qrTemplate := `<body>
         <img src="data:image/jpeg;base64,%s"/>
     </body>`

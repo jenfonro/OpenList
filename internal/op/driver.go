@@ -151,6 +151,12 @@ func getMainItems(config driver.Config) []driver.Item {
 		Default:  "false",
 		Required: true,
 	})
+	items = append(items, driver.Item{
+		Name:    "driver_proxy_addr",
+		Type:    conf.TypeText,
+		Default: "",
+		Help:    "Driver proxy server address (e.g., http://proxy.example.com:8080)",
+	})
 	return items
 }
 func getAdditionalItems(t reflect.Type, defaultRoot string) []driver.Item {

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 )
 
 type TmpTokenResponse struct {
@@ -44,7 +46,7 @@ func getCredentials(AccessKey, SecretKey string) (rst Credentials, err error) {
 	}
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", Authorization)
-	client := http.Client{}
+	client := *base.HttpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return rst, err

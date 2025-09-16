@@ -108,7 +108,7 @@ func (d *Strm) Get(ctx context.Context, path string) (model.Obj, error) {
 		if err != nil {
 			continue
 		}
-		// fs.Get 没报错，说明不是strm生成的路径，需要直接返回
+		// fs.Get 没报错，说明不是strm生成的路径，需要直接返�?
 		size := int64(0)
 		if !obj.IsDir() {
 			size = obj.GetSize()

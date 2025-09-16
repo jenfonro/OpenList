@@ -20,17 +20,13 @@ import (
 
 // NewNoRedirectClient creates an HTTP client that doesn't follow redirects
 func NewNoRedirectCLient() *http.Client {
-	return &http.Client{
-		Timeout: time.Hour * 48,
-		Transport: &http.Transport{
-			Proxy:           http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify},
-		},
-		// Prevent following redirects
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	client := *base.HttpClient
+	client.Timeout = time.Hour * 48
+	// Prevent following redirects
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
+	return &client
 }
 
 // getCookiesWithPassword fetches cookies required for authenticated access using the provided password
@@ -95,10 +91,9 @@ func getCookiesWithPassword(link, password string) (string, error) {
 		"__VIEWSTATEENCRYPTED": []string{""},
 	}
 
-	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	client := *base.HttpClient
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 	// Send the POST request, preventing redirects
 	resp, err = client.PostForm(newURL, data)
@@ -289,7 +284,7 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 	}
 	tempHeader["Content-Type"] = []string{"application/json;odata=verbose"}
 
-	client := &http.Client{}
+	client := *base.HttpClient
 	postUrl := strings.Join(redirectSplitURL[:len(redirectSplitURL)-3], "/") + "/_api/v2.1/graphql"
 	req, err = http.NewRequest(http.MethodPost, postUrl, strings.NewReader(graphqlVar))
 	if err != nil {

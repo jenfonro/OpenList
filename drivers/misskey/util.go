@@ -20,7 +20,7 @@ import (
 
 func (d *Misskey) request(path, method string, callback base.ReqCallback, resp interface{}) error {
 	url := d.Endpoint + "/api/drive" + path
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 
 	req.SetAuthToken(d.AccessToken).SetHeader("Content-Type", "application/json")
 
@@ -197,7 +197,7 @@ func (d *Misskey) put(ctx context.Context, dstDir model.Obj, stream model.FileSt
 		Reader:         stream,
 		UpdateProgress: up,
 	})
-	req := base.RestyClient.R().
+	req := base.RWithProxy(d.DriverProxyAddr).
 		SetContext(ctx).
 		SetFileReader("file", stream.GetName(), reader).
 		SetFormData(map[string]string{

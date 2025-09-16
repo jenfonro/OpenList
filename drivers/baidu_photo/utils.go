@@ -70,7 +70,7 @@ func (d *BaiduPhoto) Request(client *resty.Client, furl string, method string, c
 // 	u := "https://openapi.baidu.com/oauth/2.0/token"
 // 	var resp base.TokenResp
 // 	var e TokenErrResp
-// 	_, err := base.RestyClient.R().SetResult(&resp).SetError(&e).SetQueryParams(map[string]string{
+// 	_, err := base.RWithProxy(d.DriverProxyAddr).SetResult(&resp).SetError(&e).SetQueryParams(map[string]string{
 // 		"grant_type":    "refresh_token",
 // 		"refresh_token": d.RefreshToken,
 // 		"client_id":     d.ClientID,
@@ -98,7 +98,7 @@ func (d *BaiduPhoto) Post(furl string, callback base.ReqCallback, resp interface
 	return d.Request(base.RestyClient, furl, http.MethodPost, callback, resp)
 }
 
-// 获取所有文件
+// 获取所有文�?
 func (d *BaiduPhoto) GetAllFile(ctx context.Context) (files []File, err error) {
 	var cursor string
 	for {
@@ -123,7 +123,7 @@ func (d *BaiduPhoto) GetAllFile(ctx context.Context) (files []File, err error) {
 	}
 }
 
-// 删除根文件
+// 删除根文�?
 func (d *BaiduPhoto) DeleteFile(ctx context.Context, file *File) error {
 	_, err := d.Get(FILE_API_URL_V1+"/delete", func(req *resty.Request) {
 		req.SetContext(ctx)
@@ -134,7 +134,7 @@ func (d *BaiduPhoto) DeleteFile(ctx context.Context, file *File) error {
 	return err
 }
 
-// 获取所有相册
+// 获取所有相�?
 func (d *BaiduPhoto) GetAllAlbum(ctx context.Context) (albums []Album, err error) {
 	var cursor string
 	for {
@@ -163,7 +163,7 @@ func (d *BaiduPhoto) GetAllAlbum(ctx context.Context) (albums []Album, err error
 	}
 }
 
-// 获取相册中所有文件
+// 获取相册中所有文�?
 func (d *BaiduPhoto) GetAllAlbumFile(ctx context.Context, album *Album, passwd string) (files []AlbumFile, err error) {
 	var cursor string
 	for {
@@ -234,7 +234,7 @@ func (d *BaiduPhoto) DeleteAlbum(ctx context.Context, album *Album) error {
 		r.SetFormData(map[string]string{
 			"album_id":            album.AlbumID,
 			"tid":                 fmt.Sprint(album.Tid),
-			"delete_origin_image": BoolToIntStr(d.DeleteOrigin), // 是否删除原图 0 不删除 1 删除
+			"delete_origin_image": BoolToIntStr(d.DeleteOrigin), // 是否删除原图 0 不删�?1 删除
 		})
 	}, nil)
 	return err
@@ -248,7 +248,7 @@ func (d *BaiduPhoto) DeleteAlbumFile(ctx context.Context, file *AlbumFile) error
 			"album_id":   fmt.Sprint(file.AlbumID),
 			"tid":        fmt.Sprint(file.Tid),
 			"list":       fmt.Sprintf(`[{"fsid":%d,"uk":%d}]`, file.Fsid, file.Uk),
-			"del_origin": BoolToIntStr(d.DeleteOrigin), // 是否删除原图 0 不删除 1 删除
+			"del_origin": BoolToIntStr(d.DeleteOrigin), // 是否删除原图 0 不删�?1 删除
 		})
 	}, nil)
 	return err

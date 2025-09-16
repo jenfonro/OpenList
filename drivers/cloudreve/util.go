@@ -42,7 +42,7 @@ func (d *Cloudreve) request(method string, path string, callback base.ReqCallbac
 		return d.ref.request(method, path, callback, out)
 	}
 	u := d.Address + "/api/v3" + path
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Cookie":     "cloudreve-session=" + d.Cookie,
 		"Accept":     "application/json, text/plain, */*",
@@ -130,7 +130,7 @@ func (d *Cloudreve) doLogin(needCaptcha bool) error {
 		}
 		i := strings.Index(captcha, ",")
 		dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(captcha[i+1:]))
-		vRes, err := base.RestyClient.R().SetMultipartField(
+		vRes, err := base.RWithProxy(d.DriverProxyAddr).SetMultipartField(
 			"image", "validateCode.png", "image/png", dec).
 			Post(setting.GetStr(conf.OcrApi))
 		if err != nil {
@@ -170,7 +170,7 @@ func (d *Cloudreve) GetThumb(file Object) (model.Thumbnail, error) {
 	if !d.Addition.EnableThumbAndFolderSize {
 		return model.Thumbnail{}, nil
 	}
-	req := base.NoRedirectClient.R()
+	req := base.NoRedirectRWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Cookie":     "cloudreve-session=" + d.Cookie,
 		"Accept":     "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
@@ -362,7 +362,7 @@ func (d *Cloudreve) upOneDrive(ctx context.Context, stream model.FileStreamer, u
 		finish += byteSize
 		up(float64(finish) * 100 / float64(stream.GetSize()))
 	}
-	// 上传成功发送回调请求
+	// 上传成功发送回调请�?
 	return d.request(http.MethodPost, "/callback/onedrive/finish/"+u.SessionID, func(req *resty.Request) {
 		req.SetBody("{}")
 	}, nil)
@@ -433,7 +433,7 @@ func (d *Cloudreve) upS3(ctx context.Context, stream model.FileStreamer, u Uploa
 	for i, etag := range etags {
 		bodyBuilder.WriteString(fmt.Sprintf(
 			`<Part><PartNumber>%d</PartNumber><ETag>%s</ETag></Part>`,
-			i+1, // PartNumber 从 1 开始
+			i+1, // PartNumber �?1 开�?
 			etag,
 		))
 	}
@@ -458,7 +458,7 @@ func (d *Cloudreve) upS3(ctx context.Context, stream model.FileStreamer, u Uploa
 		return fmt.Errorf("up status: %d, error: %s", res.StatusCode, string(body))
 	}
 
-	// 上传成功发送回调请求
+	// 上传成功发送回调请�?
 	err = d.request(http.MethodGet, "/callback/s3/"+u.SessionID, nil, nil)
 	if err != nil {
 		return err

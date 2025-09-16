@@ -48,7 +48,7 @@ func (d *S3) getClient(link bool) *s3.S3 {
 			if r.HTTPRequest.Method != http.MethodGet {
 				return
 			}
-			//判断CustomHost是否以http://或https://开头
+			//判断CustomHost是否以http://或https://开�?
 			split := strings.SplitN(d.CustomHost, "://", 2)
 			if utils.SliceContains([]string{"http", "https"}, split[0]) {
 				r.HTTPRequest.URL.Scheme = split[0]

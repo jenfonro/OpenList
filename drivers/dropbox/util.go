@@ -23,7 +23,7 @@ func (d *Dropbox) refreshToken() error {
 			AccessToken  string `json:"access_token"`
 			ErrorMessage string `json:"text"`
 		}
-		_, err := base.RestyClient.R().
+		_, err := base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
@@ -48,7 +48,7 @@ func (d *Dropbox) refreshToken() error {
 	}
 	url := d.base + "/oauth2/token"
 	var tokenResp TokenResp
-	resp, err := base.RestyClient.R().
+	resp, err := base.RWithProxy(d.DriverProxyAddr).
 		//ForceContentType("application/x-www-form-urlencoded").
 		//SetBasicAuth(d.ClientID, d.ClientSecret).
 		SetFormData(map[string]string{
@@ -72,7 +72,7 @@ func (d *Dropbox) refreshToken() error {
 }
 
 func (d *Dropbox) request(uri, method string, callback base.ReqCallback, retry ...bool) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Authorization", "Bearer "+d.AccessToken)
 	if d.RootNamespaceId != "" {
 		apiPathRootJson, err := utils.Json.MarshalToString(map[string]interface{}{

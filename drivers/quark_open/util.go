@@ -29,7 +29,7 @@ func (d *QuarkOpen) request(ctx context.Context, pathname string, method string,
 
 	var tm, token, reqID string
 
-	// 检查是否手动传入签名参数
+	// 检查是否手动传入签名参�?
 	if len(manualSign) > 0 && manualSign[0] != nil {
 		tm = manualSign[0].Tm
 		token = manualSign[0].Token
@@ -39,7 +39,7 @@ func (d *QuarkOpen) request(ctx context.Context, pathname string, method string,
 		tm, token, reqID = d.generateReqSign(method, pathname, d.Addition.SignKey)
 	}
 
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetContext(ctx)
 	req.SetHeaders(map[string]string{
 		"Accept":          "application/json, text/plain, */*",
@@ -64,7 +64,7 @@ func (d *QuarkOpen) request(ctx context.Context, pathname string, method string,
 	if err != nil {
 		return nil, err
 	}
-	// 判断 是否需要 刷新 access_token
+	// 判断 是否需�?刷新 access_token
 	if e.Status == -1 && (e.Errno == 11001 || (e.Errno == 14001 && strings.Contains(e.ErrorInfo, "access_token"))) {
 		// token 过期
 		err = d.refreshToken()
@@ -90,10 +90,10 @@ func (d *QuarkOpen) GetFiles(ctx context.Context, parent string) ([]File, error)
 	for {
 		reqBody := map[string]interface{}{
 			"parent_fid": parent,
-			"size":       100,             // 默认每页100个文件
+			"size":       100,             // 默认每页100个文�?
 			"sort":       "file_name:asc", // 基本排序方式
 		}
-		// 如果有排序设置
+		// 如果有排序设�?
 		if d.OrderBy != "none" {
 			reqBody["sort"] = d.OrderBy + ":" + d.OrderDirection
 		}
@@ -133,7 +133,7 @@ func (d *QuarkOpen) upPre(ctx context.Context, file model.FileStreamer, parentId
 	apiPath := "/open/v1/file/upload_pre"
 	tm, xPanToken, reqID := d.generateReqSign(httpMethod, apiPath, d.Addition.SignKey)
 
-	// 生成proof相关字段，传入 x-pan-token
+	// 生成proof相关字段，传�?x-pan-token
 	proofVersion, proofSeed1, proofSeed2, proofCode1, proofCode2, err := d.generateProof(file, xPanToken)
 	if err != nil {
 		return UpPreResp{}, fmt.Errorf("failed to generate proof: %w", err)
@@ -158,7 +158,7 @@ func (d *QuarkOpen) upPre(ctx context.Context, file model.FileStreamer, parentId
 
 	var resp UpPreResp
 
-	// 使用手动生成的签名参数
+	// 使用手动生成的签名参�?
 	manualSign := &ManualSign{
 		Tm:    tm,
 		Token: xPanToken,
@@ -176,7 +176,7 @@ func (d *QuarkOpen) upPre(ctx context.Context, file model.FileStreamer, parentId
 func (d *QuarkOpen) generateProof(file model.FileStreamer, xPanToken string) (proofVersion, proofSeed1, proofSeed2, proofCode1, proofCode2 string, err error) {
 	// 获取文件大小
 	fileSize := file.GetSize()
-	// 设置proof_version (固定为"v1")
+	// 设置proof_version (固定�?v1")
 	proofVersion = "v1"
 	// 生成proof_seed1 - 算法: md5(userid+x-pan-token)
 	proofSeed1 = d.generateProofSeed1(xPanToken)
@@ -196,14 +196,14 @@ func (d *QuarkOpen) generateProof(file model.FileStreamer, xPanToken string) (pr
 	return proofVersion, proofSeed1, proofSeed2, proofCode1, proofCode2, nil
 }
 
-// generateProofSeed1 生成proof_seed1，基于 userId、x-pan-token
+// generateProofSeed1 生成proof_seed1，基�?userId、x-pan-token
 func (d *QuarkOpen) generateProofSeed1(xPanToken string) string {
 	concatString := d.conf.userId + xPanToken
 	md5Hash := md5.Sum([]byte(concatString))
 	return hex.EncodeToString(md5Hash[:])
 }
 
-// generateProofSeed2 生成proof_seed2，基于 fileSize
+// generateProofSeed2 生成proof_seed2，基�?fileSize
 func (d *QuarkOpen) generateProofSeed2(fileSize int64) string {
 	md5Hash := md5.Sum([]byte(strconv.FormatInt(fileSize, 10)))
 	return hex.EncodeToString(md5Hash[:])
@@ -228,7 +228,7 @@ func (d *QuarkOpen) generateProofCode(file model.FileStreamer, proofSeed string,
 		return "", nil
 	}
 
-	// 使用FileStreamer的RangeRead方法读取特定范围的数据
+	// 使用FileStreamer的RangeRead方法读取特定范围的数�?
 	reader, err := file.RangeRead(http_range.Range{
 		Start:  proofRange.Start,
 		Length: length,
@@ -258,7 +258,7 @@ func (d *QuarkOpen) getProofRange(proofSeed string, fileSize int64) (*ProofRange
 	if fileSize == 0 {
 		return &ProofRange{}, nil
 	}
-	// 对 proofSeed 进行 MD5 处理，取前16个字符
+	// �?proofSeed 进行 MD5 处理，取�?6个字�?
 	md5Hash := md5.Sum([]byte(proofSeed))
 	tmpStr := hex.EncodeToString(md5Hash[:])[:16]
 	// 转为 uint64
@@ -273,7 +273,7 @@ func (d *QuarkOpen) getProofRange(proofSeed string, fileSize int64) (*ProofRange
 		Start: int64(index),
 		End:   int64(index) + 8,
 	}
-	// 确保 End 不超过文件大小
+	// 确保 End 不超过文件大�?
 	if pr.End > fileSize {
 		pr.End = fileSize
 	}
@@ -308,7 +308,7 @@ func (d *QuarkOpen) _getPartInfo(stream model.FileStreamer, partSize int64) []ba
 }
 
 func (d *QuarkOpen) upUrl(ctx context.Context, pre UpPreResp, partInfo []base.Json) (upUrlInfo UpUrlInfo, err error) {
-	// 构建请求体
+	// 构建请求�?
 	data := base.Json{
 		"task_id":        pre.Data.TaskID,
 		"part_info_list": partInfo,
@@ -340,7 +340,7 @@ func (d *QuarkOpen) upPart(ctx context.Context, upUrlInfo UpUrlInfo, partNumber 
 	req.Header.Set("Accept-Encoding", "gzip")
 	req.Header.Set("User-Agent", "Go-http-client/1.1")
 
-	// 发送请求
+	// 发送请�?
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -352,14 +352,14 @@ func (d *QuarkOpen) upPart(ctx context.Context, upUrlInfo UpUrlInfo, partNumber 
 		body, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("up status: %d, error: %s", resp.StatusCode, string(body))
 	}
-	// 返回 Etag 作为分片上传的标识
+	// 返回 Etag 作为分片上传的标�?
 	return resp.Header.Get("Etag"), nil
 }
 
 func (d *QuarkOpen) upFinish(ctx context.Context, pre UpPreResp, partInfo []base.Json, etags []string) error {
 	// 创建 part_info_list
 	partInfoList := make([]base.Json, len(partInfo))
-	// 确保 partInfo 和 etags 长度一致
+	// 确保 partInfo �?etags 长度一�?
 	if len(partInfo) != len(etags) {
 		return fmt.Errorf("part info count (%d) does not match etags count (%d)", len(partInfo), len(etags))
 	}
@@ -371,13 +371,13 @@ func (d *QuarkOpen) upFinish(ctx context.Context, pre UpPreResp, partInfo []base
 			"etag":        etags[i],
 		}
 	}
-	// 构建请求体
+	// 构建请求�?
 	data := base.Json{
 		"task_id":        pre.Data.TaskID,
 		"part_info_list": partInfoList,
 	}
 
-	// 发送请求
+	// 发送请�?
 	var resp UpFinishResp
 	_, err := d.request(ctx, "/open/v1/file/upload_finish", http.MethodPost, func(req *resty.Request) {
 		req.SetBody(data)
@@ -402,7 +402,7 @@ type ManualSign struct {
 }
 
 func (d *QuarkOpen) generateReqSign(method string, pathname string, signKey string) (string, string, string) {
-	// 生成时间戳 (13位毫秒级)
+	// 生成时间�?(13位毫秒级)
 	timestamp := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
 	// 生成 x-pan-token token的组成是: method + "&" + pathname + "&" + timestamp + "&" + signKey
@@ -440,7 +440,7 @@ func (d *QuarkOpen) _refreshToken() (string, string, error) {
 	if d.UseOnlineAPI && d.APIAddress != "" {
 		u := d.APIAddress
 		var resp RefreshTokenOnlineAPIResp
-		_, err := base.RestyClient.R().
+		_, err := base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{

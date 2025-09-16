@@ -22,7 +22,7 @@ type ExpertAddition struct {
 	// 登录方式2
 	RefreshToken string `json:"refresh_token" required:"true" help:"login type is refresh_token,this is required"`
 
-	SafePassword string `json:"safe_password" required:"true" help:"super safe password"` // 超级保险箱密码
+	SafePassword string `json:"safe_password" required:"true" help:"super safe password"` // 超级保险箱密�?
 
 	// 签名方法1
 	Algorithms string `json:"algorithms" required:"true" help:"sign type is algorithms,this is required" default:"Cw4kArmKJ/aOiFTxnQ0ES+D4mbbrIUsFn,HIGg0Qfbpm5ThZ/RJfjoao4YwgT9/M,u/PUD,OlAm8tPkOF1qO5bXxRN2iFttuDldrg,FFIiM6sFhWhU7tIMVUKOF7CUv/KzgwwV8FE,yN,4m5mglrIHksI6wYdq,LXEfS7,T+p+C+F2yjgsUtiXWU/cMNYEtJI4pq7GofW,14BrGIEMXkbvFvZ49nDUfVCRcHYFOJ1BP1Y,kWIH3Row,RAmRTKNCjucPWC"`
@@ -30,25 +30,25 @@ type ExpertAddition struct {
 	CaptchaSign string `json:"captcha_sign" required:"true" help:"sign type is captcha_sign,this is required"`
 	Timestamp   string `json:"timestamp" required:"true" help:"sign type is captcha_sign,this is required"`
 
-	// 验证码
+	// 验证�?
 	CaptchaToken string `json:"captcha_token"`
 	// 信任密钥
 	CreditKey string `json:"credit_key" help:"credit key,used for login"`
 
-	// 必要且影响登录,由签名决定
+	// 必要且影响登�?由签名决�?
 	DeviceID      string `json:"device_id"  required:"false" default:""`
 	ClientID      string `json:"client_id"  required:"true" default:"ZUBzD9J_XPXfn7f7"`
 	ClientSecret  string `json:"client_secret"  required:"true" default:"yESVmHecEe6F0aou69vl-g"`
 	ClientVersion string `json:"client_version"  required:"true" default:"1.40.0.7208"`
 	PackageName   string `json:"package_name"  required:"true" default:"com.xunlei.browser"`
 
-	// 不影响登录,影响下载速度
+	// 不影响登�?影响下载速度
 	UserAgent         string `json:"user_agent"  required:"false" default:""`
 	DownloadUserAgent string `json:"download_user_agent"  required:"false" default:""`
 
 	// 优先使用视频链接代替下载链接
 	UseVideoUrl bool `json:"use_video_url"`
-	// 离线下载是否使用 流畅播(Fluent Play)接口
+	// 离线下载是否使用 流畅�?Fluent Play)接口
 	UseFluentPlay bool `json:"use_fluent_play" default:"false" help:"use fluent play for offline download,only magnet links supported"`
 	// 移除方式
 	RemoveWay string `json:"remove_way" required:"true" type:"select" options:"trash,delete"`
@@ -81,12 +81,12 @@ type Addition struct {
 	driver.RootID
 	Username     string `json:"username" required:"true"`
 	Password     string `json:"password" required:"true"`
-	SafePassword string `json:"safe_password" required:"true"` // 超级保险箱密码
+	SafePassword string `json:"safe_password" required:"true"` // 超级保险箱密�?
 	CaptchaToken string `json:"captcha_token"`
 	CreditKey    string `json:"credit_key" help:"credit key,used for login"` // 信任密钥
 	DeviceID     string `json:"device_id" default:""`                        // 登录设备ID
 	UseVideoUrl  bool   `json:"use_video_url" default:"false"`
-	// 离线下载是否使用 流畅播(Fluent Play)接口
+	// 离线下载是否使用 流畅�?Fluent Play)接口
 	UseFluentPlay bool   `json:"use_fluent_play" default:"false" help:"use fluent play for offline download,only magnet links supported"`
 	RemoveWay     string `json:"remove_way" required:"true" type:"select" options:"trash,delete"`
 }

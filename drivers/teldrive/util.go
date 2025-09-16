@@ -14,7 +14,7 @@ import (
 
 func (d *Teldrive) request(method string, pathname string, callback base.ReqCallback, resp interface{}) error {
 	url := d.Address + pathname
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Cookie", d.Cookie)
 	if callback != nil {
 		callback(req)

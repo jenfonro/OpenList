@@ -88,7 +88,7 @@ import (
 //		//}
 //		//vCodeRS, err = message.GetMessenger().WaitReceive(30)
 //		// use ocr api
-//		vRes, err := base.RestyClient.R().SetMultipartField(
+//		vRes, err := base.RWithProxy(d.DriverProxyAddr).SetMultipartField(
 //			"image", "validateCode.png", "image/png", bytes.NewReader(imgRes.Body())).
 //			Post(setting.GetStr(conf.OcrApi))
 //		if err != nil {

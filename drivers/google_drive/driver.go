@@ -130,7 +130,7 @@ func (d *GoogleDrive) Put(ctx context.Context, dstDir model.Obj, stream model.Fi
 		}
 		url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true"
 	}
-	req := base.NoRedirectClient.R().
+	req := base.NoRedirectRWithProxy(d.DriverProxyAddr).
 		SetHeaders(map[string]string{
 			"Authorization":           "Bearer " + d.AccessToken,
 			"X-Upload-Content-Type":   stream.GetMimetype(),

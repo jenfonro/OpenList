@@ -56,7 +56,7 @@ func (d *Pan123Share) request(url string, method string, callback base.ReqCallba
 	if d.ref != nil {
 		return d.ref.Request(url, method, callback, resp)
 	}
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"origin":        "https://www.123pan.com",
 		"referer":       "https://www.123pan.com/",

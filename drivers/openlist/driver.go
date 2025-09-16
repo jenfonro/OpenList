@@ -58,7 +58,7 @@ func (d *OpenList) Init(ctx context.Context) error {
 	}
 	if resp.Data.Role == model.GUEST {
 		u := d.Address + "/api/public/settings"
-		res, err := base.RestyClient.R().Get(u)
+		res, err := base.RWithProxy(d.DriverProxyAddr).Get(u)
 		if err != nil {
 			return err
 		}

@@ -66,7 +66,7 @@ func (d *CloudreveV4) _request(method string, path string, callback base.ReqCall
 	}
 
 	u := d.Address + "/api/v4" + path
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeaders(map[string]string{
 		"Accept":     "application/json, text/plain, */*",
 		"User-Agent": d.getUA(),
@@ -178,7 +178,7 @@ func (d *CloudreveV4) doLogin(needCaptcha bool) error {
 		loginBody["ticket"] = captcha.Ticket
 		i := strings.Index(captcha.Image, ",")
 		dec := base64.NewDecoder(base64.StdEncoding, strings.NewReader(captcha.Image[i+1:]))
-		vRes, err := base.RestyClient.R().SetMultipartField(
+		vRes, err := base.RWithProxy(d.DriverProxyAddr).SetMultipartField(
 			"image", "validateCode.png", "image/png", dec).
 			Post(setting.GetStr(conf.OcrApi))
 		if err != nil {
@@ -519,7 +519,7 @@ func (d *CloudreveV4) upOneDrive(ctx context.Context, file model.FileStreamer, u
 		finish += byteSize
 		up(float64(finish) * 100 / float64(file.GetSize()))
 	}
-	// 上传成功发送回调请求
+	// 上传成功发送回调请�?
 	return d.request(http.MethodPost, "/callback/onedrive/"+u.SessionID+"/"+u.CallbackSecret, func(req *resty.Request) {
 		req.SetBody("{}")
 	}, nil)
@@ -591,7 +591,7 @@ func (d *CloudreveV4) upS3(ctx context.Context, file model.FileStreamer, u FileU
 	for i, etag := range etags {
 		bodyBuilder.WriteString(fmt.Sprintf(
 			`<Part><PartNumber>%d</PartNumber><ETag>%s</ETag></Part>`,
-			i+1, // PartNumber 从 1 开始
+			i+1, // PartNumber �?1 开�?
 			etag,
 		))
 	}
@@ -616,7 +616,7 @@ func (d *CloudreveV4) upS3(ctx context.Context, file model.FileStreamer, u FileU
 		return fmt.Errorf("up status: %d, error: %s", res.StatusCode, string(body))
 	}
 
-	// 上传成功发送回调请求
+	// 上传成功发送回调请�?
 	return d.request(http.MethodGet, "/callback/s3/"+u.SessionID+"/"+u.CallbackSecret, func(req *resty.Request) {
 		req.SetBody("{}")
 	}, nil)

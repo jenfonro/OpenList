@@ -15,7 +15,7 @@ var (
 
 func (d *Pan115) getAppVersion() (string, error) {
 	result := VersionResp{}
-	res, err := base.RestyClient.R().Get(driver115.ApiGetVersion)
+	res, err := base.RWithProxy(d.DriverProxyAddr).Get(driver115.ApiGetVersion)
 	if err != nil {
 		return "", err
 	}

@@ -64,7 +64,7 @@ func (d *Open123) Upload(ctx context.Context, file model.FileStreamer, createRes
 			break
 		}
 		partIndex := partIndex
-		partNumber := partIndex + 1 // 分片号从1开始
+		partNumber := partIndex + 1 // 分片号从1开�?
 		offset := partIndex * chunkSize
 		size := min(chunkSize, size-offset)
 		var reader *stream.SectionReader
@@ -127,7 +127,7 @@ func (d *Open123) Upload(ctx context.Context, file model.FileStreamer, createRes
 					return err
 				}
 
-				// 设置请求头
+				// 设置请求�?
 				req.Header.Add("Authorization", "Bearer "+d.AccessToken)
 				req.Header.Add("Content-Type", w.FormDataContentType())
 				req.Header.Add("Platform", "open_platform")

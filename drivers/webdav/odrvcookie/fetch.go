@@ -116,9 +116,8 @@ func (ca *CookieAuth) getSPCookie(conf *SuccessResponse) (CookieResponse, error)
 		return CookieResponse{}, err
 	}
 
-	client := &http.Client{
-		Jar: jar,
-	}
+	client := *base.HttpClient
+	client.Jar = jar
 
 	// Send the previously acquired Token as a Post parameter
 	if _, err = client.Post(u.String(), "text/xml", strings.NewReader(conf.Succ.Token)); err != nil {
@@ -186,7 +185,7 @@ func (ca *CookieAuth) getSPToken() (*SuccessResponse, error) {
 		return nil, err
 	}
 
-	client := base.HttpClient
+	client := *base.HttpClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

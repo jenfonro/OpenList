@@ -219,8 +219,8 @@ type QueryGroupContentListResp struct {
 				Path string `json:"path"`
 			} `json:"catalogList"`
 			ContentList []Content `json:"contentList"`
-			NodeCount   int       `json:"nodeCount"` // 文件+文件夹数量
-			CtlgCnt     int       `json:"ctlgCnt"`   // 文件夹数量
+			NodeCount   int       `json:"nodeCount"` // 文件+文件夹数�?
+			CtlgCnt     int       `json:"ctlgCnt"`   // 文件夹数�?
 			ContCnt     int       `json:"contCnt"`   // 文件数量
 		} `json:"getGroupContentResult"`
 	} `json:"data"`

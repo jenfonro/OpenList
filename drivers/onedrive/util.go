@@ -81,7 +81,7 @@ func (d *Onedrive) _refreshToken() error {
 			AccessToken  string `json:"access_token"`
 			ErrorMessage string `json:"text"`
 		}
-		_, err := base.RestyClient.R().
+		_, err := base.RWithProxy(d.DriverProxyAddr).
 			SetHeader("User-Agent", "Mozilla/5.0 (Macintosh; Apple macOS 15_5) AppleWebKit/537.36 (KHTML, like Gecko) Safari/537.36 Chrome/138.0.0.0 Openlist/425.6.30").
 			SetResult(&resp).
 			SetQueryParams(map[string]string{
@@ -104,7 +104,7 @@ func (d *Onedrive) _refreshToken() error {
 		op.MustSaveDriverStorage(d)
 		return nil
 	}
-	// 使用本地客户端的情况下检查是否为空
+	// 使用本地客户端的情况下检查是否为�?
 	if d.ClientID == "" || d.ClientSecret == "" {
 		return fmt.Errorf("empty ClientID or ClientSecret")
 	}
@@ -112,7 +112,7 @@ func (d *Onedrive) _refreshToken() error {
 	url := d.GetMetaUrl(true, "") + "/common/oauth2/v2.0/token"
 	var resp base.TokenResp
 	var e TokenErr
-	_, err := base.RestyClient.R().SetResult(&resp).SetError(&e).SetFormData(map[string]string{
+	_, err := base.RWithProxy(d.DriverProxyAddr).SetResult(&resp).SetError(&e).SetFormData(map[string]string{
 		"grant_type":    "refresh_token",
 		"client_id":     d.ClientID,
 		"client_secret": d.ClientSecret,
@@ -134,7 +134,7 @@ func (d *Onedrive) _refreshToken() error {
 }
 
 func (d *Onedrive) Request(url string, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	req.SetHeader("Authorization", "Bearer "+d.AccessToken)
 	if callback != nil {
 		callback(req)

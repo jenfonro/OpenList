@@ -44,7 +44,7 @@ func signatureOfHmac(sessionSecret, sessionKey, operate, fullUrl, dateOfGmt, par
 	return strings.ToUpper(hex.EncodeToString(mac.Sum(nil)))
 }
 
-// RAS 加密用户名密码
+// RAS 加密用户名密�?
 func RsaEncrypt(publicKey, origData string) string {
 	block, _ := pem.Decode([]byte(publicKey))
 	pubInterface, _ := x509.ParsePKIXPublicKey(block.Bytes)
@@ -70,12 +70,12 @@ func PKCS7Padding(ciphertext []byte, blockSize int) []byte {
 	return append(ciphertext, padtext...)
 }
 
-// 获取http规范的时间
+// 获取http规范的时�?
 func getHttpDateStr() string {
 	return time.Now().UTC().Format(http.TimeFormat)
 }
 
-// 时间戳
+// 时间�?
 func timestamp() int64 {
 	return time.Now().UTC().UnixNano() / 1e6
 }
@@ -195,8 +195,8 @@ func BoolToNumber(b bool) int {
 
 // 计算分片大小
 // 对分片数量有限制
-// 10MIB 20 MIB 999片
-// 50MIB 60MIB 70MIB 80MIB ∞MIB 1999片
+// 10MIB 20 MIB 999�?
+// 50MIB 60MIB 70MIB 80MIB ∞MIB 1999�?
 func partSize(size int64) int64 {
 	const DEFAULT = 1024 * 1024 * 10 // 10MIB
 	if size > DEFAULT*2*999 {

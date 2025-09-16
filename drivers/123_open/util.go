@@ -18,7 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var ( //不同情况下获取的AccessTokenQPS限制不同 如下模块化易于拓展
+var ( //不同情况下获取的AccessTokenQPS限制不同 如下模块化易于拓�?
 	Api = "https://open-api.123pan.com"
 
 	AccessToken    = InitApiInfo(Api+"/api/v1/access_token", 1)
@@ -38,7 +38,7 @@ var ( //不同情况下获取的AccessTokenQPS限制不同 如下模块化易于
 func (d *Open123) Request(apiInfo *ApiInfo, method string, callback base.ReqCallback, resp interface{}) ([]byte, error) {
 	retryToken := true
 	for {
-		req := base.RestyClient.R()
+		req := base.RWithProxy(d.DriverProxyAddr)
 		req.SetHeaders(map[string]string{
 			"authorization": "Bearer " + d.AccessToken,
 			"platform":      "open_platform",
@@ -122,10 +122,10 @@ func (d *Open123) flushAccessToken() error {
 }
 
 func (d *Open123) SignURL(originURL, privateKey string, uid uint64, validDuration time.Duration) (newURL string, err error) {
-	// 生成Unix时间戳
+	// 生成Unix时间�?
 	ts := time.Now().Add(validDuration).Unix()
 
-	// 生成随机数（建议使用UUID，不能包含中划线（-））
+	// 生成随机数（建议使用UUID，不能包含中划线�?））
 	rand := strings.ReplaceAll(uuid.New().String(), "-", "")
 
 	// 解析URL

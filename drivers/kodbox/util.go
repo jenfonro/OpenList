@@ -11,7 +11,7 @@ import (
 
 func (d *KodBox) getToken() error {
 	var authResp CommonResp
-	res, err := base.RestyClient.R().
+	res, err := base.RWithProxy(d.DriverProxyAddr).
 		SetResult(&authResp).
 		SetQueryParams(map[string]string{
 			"name":     d.UserName,
@@ -38,9 +38,9 @@ func (d *KodBox) request(method string, pathname string, callback base.ReqCallba
 	if !strings.HasPrefix(pathname, "http") {
 		full = d.Address + pathname
 	}
-	req := base.RestyClient.R()
+	req := base.RWithProxy(d.DriverProxyAddr)
 	if len(noRedirect) > 0 && noRedirect[0] {
-		req = base.NoRedirectClient.R()
+		req = base.NoRedirectRWithProxy(d.DriverProxyAddr)
 	}
 	req.SetFormData(map[string]string{
 		"accessToken": d.authorization,
