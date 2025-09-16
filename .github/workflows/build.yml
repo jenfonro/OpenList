@@ -36,12 +36,10 @@ jobs:
           go-version: "1.25.0"
 
       - name: Setup web
-        run: |
-          git clone --branch proxy https://github.com/jenfonro/OpenList-Frontend frontend
-          cd frontend
-          bash build.sh --dev
+        run: bash build.sh dev web
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FRONTEND_REPO: "https://github.com/jenfonro/OpenList-Frontend"
 
       - name: Build
         uses: OpenListTeam/cgo-actions@v1.2.2
