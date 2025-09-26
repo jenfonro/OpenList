@@ -273,6 +273,36 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 			//rapid upload, since got md5 match from baidu server
 			return fileToObj(precreateResp.File), nil
 		}
+	} else {
+		// 验证恢复的进度数据完整性
+		if precreateResp == nil {
+			log.Warn("[baidu_netdisk] recovered progress is nil, restarting upload")
+			precreateResp, err = d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
+			if err != nil {
+				return nil, err
+			}
+			if precreateResp.ReturnType == 2 {
+				return fileToObj(precreateResp.File), nil
+			}
+		} else if precreateResp.Uploadid == "" {
+			log.Warn("[baidu_netdisk] recovered progress has empty uploadid, restarting upload")
+			precreateResp, err = d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
+			if err != nil {
+				return nil, err
+			}
+			if precreateResp.ReturnType == 2 {
+				return fileToObj(precreateResp.File), nil
+			}
+		} else if precreateResp.BlockList == nil {
+			log.Warn("[baidu_netdisk] recovered progress has nil blocklist, restarting upload")
+			precreateResp, err = d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
+			if err != nil {
+				return nil, err
+			}
+			if precreateResp.ReturnType == 2 {
+				return fileToObj(precreateResp.File), nil
+			}
+		}
 	}
 
 	// step.2 上传分片
@@ -286,6 +316,18 @@ uploadLoop:
 		cacheReaderAt, okReaderAt := cache.(io.ReaderAt)
 		if !okReaderAt {
 			return nil, fmt.Errorf("cache object must implement io.ReaderAt interface for upload operations")
+		}
+
+		// 安全检查：确保precreateResp不为nil
+		if precreateResp == nil {
+			log.Error("[baidu_netdisk] precreateResp is nil, cannot continue upload")
+			return nil, fmt.Errorf("precreateResp is nil, upload cannot continue")
+		}
+
+		// 安全检查：确保BlockList不为nil
+		if precreateResp.BlockList == nil {
+			log.Error("[baidu_netdisk] precreateResp.BlockList is nil, cannot continue upload")
+			return nil, fmt.Errorf("precreateResp.BlockList is nil, upload cannot continue")
 		}
 
 		totalParts := len(precreateResp.BlockList)
@@ -329,8 +371,10 @@ uploadLoop:
 		}
 
 		// 保存进度（所有错误都会保存）
-		precreateResp.BlockList = utils.SliceFilter(precreateResp.BlockList, func(s int) bool { return s >= 0 })
-		base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
+		if precreateResp != nil && precreateResp.BlockList != nil {
+			precreateResp.BlockList = utils.SliceFilter(precreateResp.BlockList, func(s int) bool { return s >= 0 })
+			base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
+		}
 
 		if errors.Is(err, context.Canceled) {
 			return nil, err
@@ -350,10 +394,41 @@ uploadLoop:
 			base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
 			continue uploadLoop
 		}
+
+		// 检查是否是空指针解引用错误，如果是则重新开始上传
+		if err != nil && (strings.Contains(err.Error(), "nil pointer") ||
+			strings.Contains(err.Error(), "invalid memory address")) {
+			log.Warn("[baidu_netdisk] detected nil pointer error, restarting upload from scratch")
+			// 清理无效的进度数据
+			base.SaveUploadProgress(d, nil, d.AccessToken, contentMd5)
+			// 重新 precreate
+			newPre, err2 := d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
+			if err2 != nil {
+				return nil, err2
+			}
+			if newPre.ReturnType == 2 {
+				return fileToObj(newPre.File), nil
+			}
+			precreateResp = newPre
+			// 保存新的进度
+			base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
+			continue uploadLoop
+		}
+
 		return nil, err
 	}
 
 	// step.3 创建文件
+	// 最终安全检查：确保precreateResp和Uploadid有效
+	if precreateResp == nil {
+		log.Error("[baidu_netdisk] precreateResp is nil before final create step")
+		return nil, fmt.Errorf("precreateResp is nil, cannot create file")
+	}
+	if precreateResp.Uploadid == "" {
+		log.Error("[baidu_netdisk] precreateResp.Uploadid is empty before final create step")
+		return nil, fmt.Errorf("precreateResp.Uploadid is empty, cannot create file")
+	}
+
 	var newFile File
 	_, err = d.create(path, streamSize, 0, precreateResp.Uploadid, blockListStr, &newFile, mtime, ctime)
 	if err != nil {
