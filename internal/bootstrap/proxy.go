@@ -31,6 +31,6 @@ func isValidProxyAddress(address string) bool {
 	// 使用正则表达式验证代理地址格式
 	// 支持 HTTP/HTTPS 代理：http://host:port 或 https://host:port
 	// 支持 SOCKS 代理：socks5://host:port 或 socks4://host:port
-	matched, _ := regexp.MatchString(`^(https?|socks[45])://[a-zA-Z0-9.-]+:\d+$`, address)
+	matched, _ := regexp.MatchString(`^(https?|socks4|socks5h?)://([a-zA-Z0-9.-]+|\[[0-9a-fA-F:]+\]):\d+$`, address)
 	return matched
 }
