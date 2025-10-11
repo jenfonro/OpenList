@@ -208,7 +208,7 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 
 			if uploadErr == nil {
 				// 上传成功，跳出重试循环
-				log.Debugf("Part %d upload successful on attempt %d", partNumber, retryCount+1)
+				log.Debugf("Part %d upload successful on attempt %d, ETag: %s", partNumber, retryCount+1, m)
 				break
 			}
 
