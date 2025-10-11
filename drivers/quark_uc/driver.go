@@ -192,12 +192,31 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 		}
 		left -= int64(n)
 		log.Debugf("left: %d", left)
-		reader := driver.NewLimitedUploadStream(ctx, bytes.NewReader(part))
-		m, err := d.upPart(ctx, pre, stream.GetMimetype(), partNumber, reader)
-		// m, err := driver.UpPart(pre, file.GetMIMEType(), partNumber, bytes, account, md5Str, sha1Str)
-		if err != nil {
-			return err
+
+		// 分片重试机制
+		maxRetries := 5
+		var m string
+		var uploadErr error
+
+		for retryCount := 0; retryCount < maxRetries; retryCount++ {
+			reader := driver.NewLimitedUploadStream(ctx, bytes.NewReader(part))
+			m, uploadErr = d.upPart(ctx, pre, stream.GetMimetype(), partNumber, reader)
+
+			if uploadErr == nil {
+				// 上传成功，跳出重试循环
+				break
+			}
+
+			// 输出重试信息到debug日志
+			log.Debugf("Part %d upload failed (attempt %d/%d): %v", partNumber, retryCount+1, maxRetries, uploadErr)
 		}
+
+		// 如果所有重试都失败了，才返回错误
+		if uploadErr != nil {
+			log.Errorf("Part %d upload failed after %d retries: %v", partNumber, maxRetries, uploadErr)
+			return uploadErr
+		}
+
 		if m == "finish" {
 			return nil
 		}
