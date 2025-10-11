@@ -7,6 +7,7 @@ import (
 	"hash"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
@@ -198,17 +199,29 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 		var m string
 		var uploadErr error
 
+		log.Debugf("Starting upload process for part %d (size: %d bytes)", partNumber, len(part))
+
 		for retryCount := 0; retryCount < maxRetries; retryCount++ {
+			log.Debugf("\033[33m[RETRY]\033[0m Attempting upload for part %d (attempt %d/%d)", partNumber, retryCount+1, maxRetries)
 			reader := driver.NewLimitedUploadStream(ctx, bytes.NewReader(part))
 			m, uploadErr = d.upPart(ctx, pre, stream.GetMimetype(), partNumber, reader)
 
 			if uploadErr == nil {
 				// 上传成功，跳出重试循环
+				log.Debugf("Part %d upload successful on attempt %d", partNumber, retryCount+1)
 				break
 			}
 
-			// 输出重试信息到debug日志
-			log.Debugf("Part %d upload failed (attempt %d/%d): %v", partNumber, retryCount+1, maxRetries, uploadErr)
+			// 输出重试信息到debug日志，包含完整的错误信息
+			log.Debugf("\033[31m[FAILED]\033[0m Part %d upload failed (attempt %d/%d): %v", partNumber, retryCount+1, maxRetries, uploadErr)
+
+			// 特别记录顺序上传相关的错误
+			if strings.Contains(uploadErr.Error(), "can't overwrite uploaded parts") {
+				log.Debugf("Part %d - Sequential upload error detected: %v", partNumber, uploadErr)
+			}
+			if strings.Contains(uploadErr.Error(), "smaller than the minimum allowed size") {
+				log.Debugf("Part %d - Size error detected: %v", partNumber, uploadErr)
+			}
 		}
 
 		// 如果所有重试都失败了，才返回错误
