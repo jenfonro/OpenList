@@ -332,6 +332,9 @@ type SeekableStream struct {
 	rangeReadCloser model.RangeReadCloserIF
 }
 
+// NewSeekableStream create a SeekableStream from FileStream and Link
+// if FileStream.Reader is not nil, use it directly
+// else create RangeReader from Link
 func NewSeekableStream(fs *FileStream, link *model.Link) (*SeekableStream, error) {
 	if len(fs.Mimetype) == 0 {
 		fs.Mimetype = utils.GetMimeType(fs.Obj.GetName())
@@ -368,7 +371,8 @@ func NewSeekableStream(fs *FileStream, link *model.Link) (*SeekableStream, error
 	return nil, fmt.Errorf("illegal seekableStream")
 }
 
-// RangeRead is not thread-safe, pls use it in single thread only.
+// 如果使用缓存或者rangeReader读取指定范围的数据，是线程安全的
+// 其他特性继承自FileStream.RangeRead
 func (ss *SeekableStream) RangeRead(httpRange http_range.Range) (io.Reader, error) {
 	if ss.GetFile() == nil && ss.rangeReadCloser != nil {
 		rc, err := ss.rangeReadCloser.RangeRead(ss.Ctx, httpRange)
