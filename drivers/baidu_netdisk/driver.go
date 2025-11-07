@@ -19,6 +19,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	cachepkg "github.com/OpenListTeam/OpenList/v4/internal/fs/cache"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/errgroup"
 	"github.com/OpenListTeam/OpenList/v4/pkg/singleflight"
@@ -209,22 +210,46 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 		return newObj, nil
 	}
 
+	uploadCache := cachepkg.UploadCacheFromContext(ctx)
 	var (
-		cache = stream.GetFile()
-		tmpF  *os.File
-		err   error
+		cacheFile = stream.GetFile()
+		tmpF      *os.File
+		err       error
+		keepTemp  bool
+		putErr    error
 	)
-	if _, ok := cache.(io.ReaderAt); !ok {
+	setResult := func(res model.Obj, err error) (model.Obj, error) {
+		putErr = err
+		return res, err
+	}
+	if _, ok := cacheFile.(io.ReaderAt); !ok {
 		tmpF, err = os.CreateTemp(conf.Conf.TempDir, "file-*")
 		if err != nil {
-			return nil, err
+			return setResult(nil, err)
 		}
-		defer func() {
-			_ = tmpF.Close()
-			_ = os.Remove(tmpF.Name())
-		}()
-		cache = tmpF
+		if uploadCache != nil {
+			uploadCache.RegisterTemp(tmpF.Name())
+		}
+		cacheFile = tmpF
 	}
+	defer func() {
+		if tmpF != nil {
+			if uploadCache != nil && keepTemp && putErr != nil {
+				uploadCache.MarkKeep(tmpF.Name())
+			}
+			_ = tmpF.Close()
+			if uploadCache == nil || !uploadCache.ShouldKeep(tmpF.Name()) {
+				if uploadCache != nil {
+					if err := uploadCache.RemoveMetadataFile(); err != nil && !os.IsNotExist(err) {
+						log.Warnf("[baidu_netdisk] failed to remove upload metadata: %v", err)
+					}
+				} else {
+					cachepkg.RemoveMetadataByPath(tmpF.Name())
+				}
+				_ = os.Remove(tmpF.Name())
+			}
+		}
+	}()
 
 	streamSize := stream.GetSize()
 	sliceSize := d.getSliceSize(streamSize)
@@ -239,44 +264,77 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 
 	// cal md5 for first 256k data
 	const SliceSize int64 = 256 * utils.KB
-	blockList := make([]string, 0, count)
-	byteSize := sliceSize
-	fileMd5H := md5.New()
-	sliceMd5H := md5.New()
-	sliceMd5H2 := md5.New()
-	slicemd5H2Write := utils.LimitWriter(sliceMd5H2, SliceSize)
-	writers := []io.Writer{fileMd5H, sliceMd5H, slicemd5H2Write}
-	if tmpF != nil {
-		writers = append(writers, tmpF)
+	var (
+		blockList  []string
+		contentMd5 string
+		sliceMd5   string
+	)
+	metaUsed := false
+	if uploadCache != nil {
+		if meta, err := uploadCache.LoadMetadata(); err == nil {
+			if meta.Size == streamSize && meta.SliceSize == sliceSize && len(meta.BlockList) == count {
+				blockList = append([]string(nil), meta.BlockList...)
+				contentMd5 = meta.ContentMD5
+				sliceMd5 = meta.SliceMD5
+				metaUsed = true
+			}
+		} else if err != nil && !os.IsNotExist(err) {
+			log.Warnf("[baidu_netdisk] failed to load upload metadata: %v", err)
+		}
 	}
-	written := int64(0)
+	if !metaUsed {
+		blockList = make([]string, 0, count)
+		byteSize := sliceSize
+		fileMd5H := md5.New()
+		sliceMd5H := md5.New()
+		sliceMd5H2 := md5.New()
+		slicemd5H2Write := utils.LimitWriter(sliceMd5H2, SliceSize)
+		writers := []io.Writer{fileMd5H, sliceMd5H, slicemd5H2Write}
+		if tmpF != nil {
+			writers = append(writers, tmpF)
+		}
+		written := int64(0)
 
-	for i := 1; i <= count; i++ {
-		if utils.IsCanceled(ctx) {
-			return nil, ctx.Err()
+		for i := 1; i <= count; i++ {
+			if utils.IsCanceled(ctx) {
+				return setResult(nil, ctx.Err())
+			}
+			if i == count {
+				byteSize = lastBlockSize
+			}
+			n, err := utils.CopyWithBufferN(io.MultiWriter(writers...), stream, byteSize)
+			written += n
+			if err != nil && err != io.EOF {
+				return setResult(nil, err)
+			}
+			blockList = append(blockList, hex.EncodeToString(sliceMd5H.Sum(nil)))
+			sliceMd5H.Reset()
 		}
-		if i == count {
-			byteSize = lastBlockSize
+		if tmpF != nil {
+			if written != streamSize {
+				return setResult(nil, errs.NewErr(err, "CreateTempFile failed, size mismatch: %d != %d ", written, streamSize))
+			}
+			_, err = tmpF.Seek(0, io.SeekStart)
+			if err != nil {
+				return setResult(nil, errs.NewErr(err, "CreateTempFile failed, can't seek to 0 "))
+			}
+			keepTemp = true
 		}
-		n, err := utils.CopyWithBufferN(io.MultiWriter(writers...), stream, byteSize)
-		written += n
-		if err != nil && err != io.EOF {
-			return nil, err
+		contentMd5 = hex.EncodeToString(fileMd5H.Sum(nil))
+		sliceMd5 = hex.EncodeToString(sliceMd5H2.Sum(nil))
+		if uploadCache != nil {
+			meta := &cachepkg.UploadMetadata{
+				Size:       streamSize,
+				SliceSize:  sliceSize,
+				ContentMD5: contentMd5,
+				SliceMD5:   sliceMd5,
+				BlockList:  append([]string(nil), blockList...),
+			}
+			if err := uploadCache.SaveMetadata(meta); err != nil {
+				log.Warnf("[baidu_netdisk] failed to save upload metadata: %v", err)
+			}
 		}
-		blockList = append(blockList, hex.EncodeToString(sliceMd5H.Sum(nil)))
-		sliceMd5H.Reset()
 	}
-	if tmpF != nil {
-		if written != streamSize {
-			return nil, errs.NewErr(err, "CreateTempFile failed, size mismatch: %d != %d ", written, streamSize)
-		}
-		_, err = tmpF.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, errs.NewErr(err, "CreateTempFile failed, can't seek to 0 ")
-		}
-	}
-	contentMd5 := hex.EncodeToString(fileMd5H.Sum(nil))
-	sliceMd5 := hex.EncodeToString(sliceMd5H2.Sum(nil))
 	blockListStr, _ := utils.Json.MarshalToString(blockList)
 	path := stdpath.Join(dstDir.GetPath(), stream.GetName())
 	mtime := stream.ModTime().Unix()
@@ -288,14 +346,14 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 		// 没有进度，走预上传
 		precreateResp, err = d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
 		if err != nil {
-			return nil, err
+			return setResult(nil, err)
 		}
 		if precreateResp.ReturnType == 2 {
 			// rapid upload, since got md5 match from baidu server
 			// 修复时间，具体原因见 Put 方法注释的 **注意**
 			precreateResp.File.Ctime = ctime
 			precreateResp.File.Mtime = mtime
-			return fileToObj(precreateResp.File), nil
+			return setResult(fileToObj(precreateResp.File), nil)
 		}
 	}
 
@@ -310,9 +368,9 @@ uploadLoop:
 			retry.Delay(time.Second),
 			retry.DelayType(retry.BackOffDelay))
 
-		cacheReaderAt, okReaderAt := cache.(io.ReaderAt)
+		cacheReaderAt, okReaderAt := cacheFile.(io.ReaderAt)
 		if !okReaderAt {
-			return nil, fmt.Errorf("cache object must implement io.ReaderAt interface for upload operations")
+			return setResult(nil, fmt.Errorf("cache object must implement io.ReaderAt interface for upload operations"))
 		}
 
 		totalParts := len(precreateResp.BlockList)
@@ -359,38 +417,38 @@ uploadLoop:
 		base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
 
 		if errors.Is(err, context.Canceled) {
-			return nil, err
+			return setResult(nil, err)
 		}
 		if errors.Is(err, ErrUploadIDExpired) {
 			log.Warn("[baidu_netdisk] uploadid expired, will restart from scratch")
 			// 重新 precreate（所有分片都要重传）
 			newPre, err2 := d.precreate(ctx, path, streamSize, blockListStr, "", "", ctime, mtime)
 			if err2 != nil {
-				return nil, err2
+				return setResult(nil, err2)
 			}
 			if newPre.ReturnType == 2 {
-				return fileToObj(newPre.File), nil
+				return setResult(fileToObj(newPre.File), nil)
 			}
 			precreateResp = newPre
 			// 覆盖掉旧的进度
 			base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
 			continue uploadLoop
 		}
-		return nil, err
+		return setResult(nil, err)
 	}
 
 	// step.3 创建文件
 	var newFile File
 	_, err = d.create(path, streamSize, 0, precreateResp.Uploadid, blockListStr, &newFile, mtime, ctime)
 	if err != nil {
-		return nil, err
+		return setResult(nil, err)
 	}
 	// 修复时间，具体原因见 Put 方法注释的 **注意**
 	newFile.Ctime = ctime
 	newFile.Mtime = mtime
 	// 上传成功清理进度
 	base.SaveUploadProgress(d, nil, d.AccessToken, contentMd5)
-	return fileToObj(newFile), nil
+	return setResult(fileToObj(newFile), nil)
 }
 
 // precreate 执行预上传操作，支持首次上传和 uploadid 过期重试
