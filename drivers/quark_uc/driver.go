@@ -12,6 +12,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	cachepkg "github.com/OpenListTeam/OpenList/v4/internal/fs/cache"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/go-resty/resty/v2"
@@ -126,43 +127,91 @@ func (d *QuarkOrUC) Remove(ctx context.Context, obj model.Obj) error {
 	return err
 }
 
+const quarkMetaSHA1Key = "quark_uc_sha1"
+
 func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) error {
+	uploadCache := cachepkg.UploadCacheFromContext(ctx)
+	var putErr error
+	defer func() {
+		if uploadCache == nil || putErr == nil {
+			return
+		}
+		if tmp := uploadCache.TempFile(); tmp != "" {
+			uploadCache.MarkKeep(tmp)
+		} else if cached := uploadCache.CachedPath(); cached != "" {
+			uploadCache.MarkKeep(cached)
+		}
+	}()
+
 	md5Str, sha1Str := stream.GetHash().GetHash(utils.MD5), stream.GetHash().GetHash(utils.SHA1)
-	var (
-		md5  hash.Hash
-		sha1 hash.Hash
-	)
-	writers := []io.Writer{}
-	if len(md5Str) != utils.MD5.Width {
-		md5 = utils.MD5.NewFunc()
-		writers = append(writers, md5)
-	}
-	if len(sha1Str) != utils.SHA1.Width {
-		sha1 = utils.SHA1.NewFunc()
-		writers = append(writers, sha1)
+	needMD5 := len(md5Str) != utils.MD5.Width
+	needSHA1 := len(sha1Str) != utils.SHA1.Width
+
+	if uploadCache != nil {
+		if meta, err := uploadCache.LoadMetadata(); err == nil {
+			if meta.Size == stream.GetSize() && meta.ContentMD5 != "" && (!needSHA1 || meta.GetExtra(quarkMetaSHA1Key) != "") {
+				if needMD5 {
+					md5Str = meta.ContentMD5
+					needMD5 = false
+				}
+				if needSHA1 {
+					if sha := meta.GetExtra(quarkMetaSHA1Key); sha != "" {
+						sha1Str = sha
+						needSHA1 = false
+					}
+				}
+			}
+		}
 	}
 
-	if len(writers) > 0 {
-		_, err := stream.CacheFullAndWriter(&up, io.MultiWriter(writers...))
-		if err != nil {
-			return err
+	if needMD5 || needSHA1 {
+		var writers []io.Writer
+		var md5 hash.Hash
+		var sha1 hash.Hash
+		if needMD5 {
+			md5 = utils.MD5.NewFunc()
+			writers = append(writers, md5)
 		}
-		if md5 != nil {
-			md5Str = hex.EncodeToString(md5.Sum(nil))
+		if needSHA1 {
+			sha1 = utils.SHA1.NewFunc()
+			writers = append(writers, sha1)
 		}
-		if sha1 != nil {
-			sha1Str = hex.EncodeToString(sha1.Sum(nil))
+		if len(writers) > 0 {
+			if _, err := stream.CacheFullAndWriter(&up, io.MultiWriter(writers...)); err != nil {
+				putErr = err
+				return err
+			}
+			if md5 != nil {
+				md5Str = hex.EncodeToString(md5.Sum(nil))
+			}
+			if sha1 != nil {
+				sha1Str = hex.EncodeToString(sha1.Sum(nil))
+			}
 		}
+		if uploadCache != nil {
+			meta := &cachepkg.UploadMetadata{
+				Size:       stream.GetSize(),
+				ContentMD5: md5Str,
+			}
+			meta.SetExtra(quarkMetaSHA1Key, sha1Str)
+			if err := uploadCache.SaveMetadata(meta); err != nil {
+				log.Warnf("[quark_uc] failed to save upload metadata: %v", err)
+			}
+		}
+		needMD5, needSHA1 = false, false
 	}
+
 	// pre
 	pre, err := d.upPre(stream, dstDir.GetID())
 	if err != nil {
+		putErr = err
 		return err
 	}
 	log.Debugln("hash: ", md5Str, sha1Str)
 	// hash
 	finish, err := d.upHash(md5Str, sha1Str, pre.Data.TaskId)
 	if err != nil {
+		putErr = err
 		return err
 	}
 	if finish {
@@ -188,6 +237,7 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 		}
 		n, err := io.ReadFull(stream, part)
 		if err != nil {
+			putErr = err
 			return err
 		}
 		left -= int64(n)
@@ -196,6 +246,7 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 		m, err := d.upPart(ctx, pre, stream.GetMimetype(), partNumber, reader)
 		// m, err := driver.UpPart(pre, file.GetMIMEType(), partNumber, bytes, account, md5Str, sha1Str)
 		if err != nil {
+			putErr = err
 			return err
 		}
 		if m == "finish" {
@@ -207,9 +258,12 @@ func (d *QuarkOrUC) Put(ctx context.Context, dstDir model.Obj, stream model.File
 	}
 	err = d.upCommit(pre, md5s)
 	if err != nil {
+		putErr = err
 		return err
 	}
-	return d.upFinish(pre)
+	err = d.upFinish(pre)
+	putErr = err
+	return err
 }
 
 func (d *QuarkOrUC) GetDetails(ctx context.Context) (*model.StorageDetails, error) {

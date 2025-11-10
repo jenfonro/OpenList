@@ -3,11 +3,14 @@ package fs
 import (
 	"context"
 	"fmt"
+	"os"
 	stdpath "path"
+	"path/filepath"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	"github.com/OpenListTeam/OpenList/v4/internal/fs/cache"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
@@ -17,6 +20,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/OpenListTeam/tache"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type taskType uint8
@@ -36,8 +40,28 @@ const (
 
 type FileTransferTask struct {
 	TaskData
-	TaskType taskType
-	groupID  string
+	TaskType      taskType
+	groupID       string
+	cachedTmpFile string
+	metaKey       string
+	retainMeta    bool
+	retryCount    int
+	maxRetry      int
+}
+
+func (t *FileTransferTask) metaKeyValue() string {
+	if t.metaKey == "" {
+		if id := t.GetID(); id != "" {
+			t.metaKey = id
+		} else {
+			t.metaKey = fmt.Sprintf("task-%d", time.Now().UnixNano())
+		}
+	}
+	return t.metaKey
+}
+
+func (t *FileTransferTask) metadataPath() string {
+	return cache.MetadataPathForKey(t.metaKeyValue())
 }
 
 func (t *FileTransferTask) GetName() string {
@@ -77,15 +101,42 @@ func (t *FileTransferTask) Run() error {
 }
 
 func (t *FileTransferTask) OnSucceeded() {
+	t.clearCachedTmpFile()
+	cache.RemoveMetadataFileAt(t.metadataPath())
 	task_group.TransferCoordinator.Done(t.groupID, true)
 }
 
 func (t *FileTransferTask) OnFailed() {
+	if !t.hasPendingRetry() {
+		t.clearCachedTmpFile()
+		if !t.retainMeta {
+			cache.RemoveMetadataFileAt(t.metadataPath())
+		}
+	}
 	task_group.TransferCoordinator.Done(t.groupID, false)
+}
+
+func (t *FileTransferTask) clearCachedTmpFile() {
+	if t.cachedTmpFile == "" {
+		return
+	}
+	if err := os.Remove(t.cachedTmpFile); err != nil && !os.IsNotExist(err) {
+		log.Warnf("failed to remove cached temp file %s: %v", t.cachedTmpFile, err)
+	}
+	t.cachedTmpFile = ""
+}
+
+func (t *FileTransferTask) hasPendingRetry() bool {
+	if t.maxRetry <= 0 {
+		return false
+	}
+	return t.retryCount < t.maxRetry
 }
 
 func (t *FileTransferTask) SetRetry(retry int, maxRetry int) {
 	t.TaskExtension.SetRetry(retry, maxRetry)
+	t.retryCount = retry
+	t.maxRetry = maxRetry
 	if retry == 0 &&
 		(len(t.groupID) == 0 || // 重启恢复
 			(t.GetErr() == nil && t.GetState() != tache.StatePending)) { // 手动重试
@@ -232,8 +283,77 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		return errors.WithMessagef(err, "failed get [%s] stream", t.SrcActualPath)
 	}
 	t.SetTotalBytes(ss.GetSize())
+
+	metaKey := t.metaKeyValue()
+	cachedPath := t.cachedTmpFile
+	if cachedPath != "" {
+		info, err := os.Stat(cachedPath)
+		if err != nil || info.Size() != srcObj.GetSize() {
+			if err == nil {
+				log.Warnf("discard cached temp file %s due to size mismatch: expect=%d actual=%d", cachedPath, srcObj.GetSize(), info.Size())
+			} else if !os.IsNotExist(err) {
+				log.Warnf("discard cached temp file %s: %v", cachedPath, err)
+			}
+			_ = os.Remove(cachedPath)
+			cache.RemoveMetadataByPath(cachedPath)
+			cache.RemoveMetadataFileAt(t.metadataPath())
+			cachedPath = ""
+			t.cachedTmpFile = ""
+		}
+	}
+
+	uploadCache := cache.NewUploadCache(cachedPath, cache.WithMetadataKey(metaKey))
+	if _, err := uploadCache.LoadMetadata(); err != nil && !os.IsNotExist(err) {
+		log.Warnf("failed to load cached metadata for %s: %v", cachedPath, err)
+	}
+	ctx := context.WithValue(t.Ctx(), conf.UploadCacheKey, uploadCache)
+	ss.FileStream.Ctx = ctx
+
+	if path := uploadCache.CachedPath(); path != "" {
+		file, err := os.Open(path)
+		if err != nil {
+			log.Warnf("failed to open cached temp file %s: %v", path, err)
+			t.cachedTmpFile = ""
+			if os.IsNotExist(err) {
+				cache.RemoveMetadataByPath(path)
+				cache.RemoveMetadataFileAt(t.metadataPath())
+			}
+		} else {
+			ss.FileStream.Add(file)
+			ss.FileStream.Reader = file
+		}
+	}
+
 	t.Status = "uploading"
-	return op.Put(t.Ctx(), t.DstStorage, t.DstActualPath, ss, t.SetProgress, true)
+	uploadErr := op.Put(ctx, t.DstStorage, t.DstActualPath, ss, t.SetProgress, true)
+
+	if uploadErr != nil {
+		if newPath := uploadCache.TempFile(); newPath != "" && uploadCache.ShouldKeep(newPath) {
+			if absPath, err := filepath.Abs(newPath); err == nil {
+				newPath = absPath
+			}
+			t.cachedTmpFile = newPath
+		} else if newPath := uploadCache.TempFile(); newPath != "" {
+			if absPath, err := filepath.Abs(newPath); err == nil {
+				newPath = absPath
+			}
+			t.cachedTmpFile = newPath
+		}
+	} else {
+		if tempPath := uploadCache.TempFile(); tempPath != "" && !uploadCache.ShouldKeep(tempPath) {
+			_ = os.Remove(tempPath)
+			cache.RemoveMetadataByPath(tempPath)
+			cache.RemoveMetadataFileAt(t.metadataPath())
+		}
+		t.clearCachedTmpFile()
+	}
+	if uploadCache != nil {
+		t.retainMeta = uploadCache.ShouldRetainMetadata()
+	} else {
+		t.retainMeta = false
+	}
+
+	return uploadErr
 }
 
 var (

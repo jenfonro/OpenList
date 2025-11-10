@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	cache "github.com/OpenListTeam/OpenList/v4/internal/fs/cache"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/buffer"
 	"github.com/OpenListTeam/OpenList/v4/pkg/http_range"
@@ -27,8 +29,8 @@ type FileStream struct {
 	ForceStreamUpload bool
 	Exist             model.Obj //the file existed in the destination, we can reuse some info since we wil overwrite it
 	utils.Closers
-	size      int64
 	peekBuff  *buffer.Reader
+	size      int64
 	oriReader io.Reader // the original reader, used for caching
 }
 
@@ -54,10 +56,32 @@ func (f *FileStream) IsForceStreamUpload() bool {
 func (f *FileStream) Close() error {
 	if f.peekBuff != nil {
 		f.peekBuff.Reset()
-		f.oriReader = nil
 		f.peekBuff = nil
 	}
-	return f.Closers.Close()
+
+	var err1, err2 error
+	err1 = f.Closers.Close()
+	if errors.Is(err1, os.ErrClosed) {
+		err1 = nil
+	}
+	if file, ok := f.Reader.(*os.File); ok {
+		uc := cache.UploadCacheFromContext(f.Ctx)
+		closeErr := file.Close()
+		if errors.Is(closeErr, os.ErrClosed) {
+			closeErr = nil
+		}
+		if uc != nil && uc.ShouldKeep(file.Name()) {
+			err2 = errors.Join(err2, closeErr)
+		} else {
+			err2 = errors.Join(err2, closeErr)
+			if removeErr := os.RemoveAll(file.Name()); removeErr != nil && !os.IsNotExist(removeErr) {
+				err2 = errors.Join(err2, errs.NewErr(removeErr, "failed to remove tmpFile [%s]", file.Name()))
+			}
+		}
+	}
+	f.Reader = nil
+
+	return errors.Join(err1, err2)
 }
 
 func (f *FileStream) GetExist() model.Obj {
@@ -211,7 +235,12 @@ func (f *FileStream) RangeRead(httpRange http_range.Range) (io.Reader, error) {
 		return io.NewSectionReader(f.GetFile(), httpRange.Start, httpRange.Length), nil
 	}
 
-	cache, err := f.cache(httpRange.Start + httpRange.Length)
+	size := httpRange.Start + httpRange.Length
+	if f.peekBuff != nil && size <= int64(f.peekBuff.Size()) {
+		return io.NewSectionReader(f.peekBuff, httpRange.Start, httpRange.Length), nil
+	}
+
+	cache, err := f.cache(size)
 	if err != nil {
 		return nil, err
 	}
@@ -280,6 +309,9 @@ func (f *FileStream) cache(maxCacheSize int64) (model.File, error) {
 	f.peekBuff.Append(buf)
 	if f.peekBuff.Size() >= f.GetSize() {
 		f.Reader = f.peekBuff
+		f.oriReader = nil
+	} else {
+		f.Reader = io.MultiReader(f.peekBuff, f.oriReader)
 	}
 	return f.peekBuff, nil
 }
@@ -287,10 +319,17 @@ func (f *FileStream) cache(maxCacheSize int64) (model.File, error) {
 var _ model.FileStreamer = (*SeekableStream)(nil)
 var _ model.FileStreamer = (*FileStream)(nil)
 
+//var _ seekableStream = (*FileStream)(nil)
+
+// for most internal stream, which is either RangeReadCloser or MFile
+// Any functionality implemented based on SeekableStream should implement a Close method,
+// whose only purpose is to close the SeekableStream object. If such functionality has
+// additional resources that need to be closed, they should be added to the Closer property of
+// the SeekableStream object and be closed together when the SeekableStream object is closed.
 type SeekableStream struct {
 	*FileStream
 	// should have one of belows to support rangeRead
-	rangeReader model.RangeReaderIF
+	rangeReadCloser model.RangeReadCloserIF
 }
 
 // NewSeekableStream create a SeekableStream from FileStream and Link
@@ -315,18 +354,19 @@ func NewSeekableStream(fs *FileStream, link *model.Link) (*SeekableStream, error
 		if err != nil {
 			return nil, err
 		}
+		rrc := &model.RangeReadCloser{
+			RangeReader: rr,
+		}
 		if _, ok := rr.(*model.FileRangeReader); ok {
-			var rc io.ReadCloser
-			rc, err = rr.RangeRead(fs.Ctx, http_range.Range{Length: -1})
+			fs.Reader, err = rrc.RangeRead(fs.Ctx, http_range.Range{Length: -1})
 			if err != nil {
 				return nil, err
 			}
-			fs.Reader = rc
-			fs.Add(rc)
 		}
 		fs.size = size
 		fs.Add(link)
-		return &SeekableStream{FileStream: fs, rangeReader: rr}, nil
+		fs.Add(rrc)
+		return &SeekableStream{FileStream: fs, rangeReadCloser: rrc}, nil
 	}
 	return nil, fmt.Errorf("illegal seekableStream")
 }
@@ -334,12 +374,11 @@ func NewSeekableStream(fs *FileStream, link *model.Link) (*SeekableStream, error
 // 如果使用缓存或者rangeReader读取指定范围的数据，是线程安全的
 // 其他特性继承自FileStream.RangeRead
 func (ss *SeekableStream) RangeRead(httpRange http_range.Range) (io.Reader, error) {
-	if ss.GetFile() == nil && ss.rangeReader != nil {
-		rc, err := ss.rangeReader.RangeRead(ss.Ctx, httpRange)
+	if ss.GetFile() == nil && ss.rangeReadCloser != nil {
+		rc, err := ss.rangeReadCloser.RangeRead(ss.Ctx, httpRange)
 		if err != nil {
 			return nil, err
 		}
-		ss.Add(rc)
 		return rc, nil
 	}
 	return ss.FileStream.RangeRead(httpRange)
@@ -355,14 +394,13 @@ func (ss *SeekableStream) Read(p []byte) (n int, err error) {
 
 func (ss *SeekableStream) generateReader() error {
 	if ss.Reader == nil {
-		if ss.rangeReader == nil {
+		if ss.rangeReadCloser == nil {
 			return fmt.Errorf("illegal seekableStream")
 		}
-		rc, err := ss.rangeReader.RangeRead(ss.Ctx, http_range.Range{Length: -1})
+		rc, err := ss.rangeReadCloser.RangeRead(ss.Ctx, http_range.Range{Length: -1})
 		if err != nil {
 			return err
 		}
-		ss.Add(rc)
 		ss.Reader = rc
 	}
 	return nil
