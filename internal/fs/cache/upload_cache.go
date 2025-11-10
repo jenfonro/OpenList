@@ -190,7 +190,8 @@ func (u *UploadCache) metadataPathLocked() string {
 	if path == "" {
 		return ""
 	}
-	return path + ".meta"
+	u.metadataPath = MetadataPathFor(path)
+	return u.metadataPath
 }
 
 // MetadataPathFor returns the metadata sidecar path for the provided temp file path.
@@ -307,7 +308,10 @@ func (u *UploadCache) SaveMetadata(meta *UploadMetadata) error {
 	u.metadata = cloneMetadata(meta)
 	path := u.metadataPathLocked()
 	if path == "" {
-		return nil
+		if u.metadataPath == "" {
+			u.metadataPath = metadataPathForKey(fmt.Sprintf("anon-%d", time.Now().UnixNano()))
+		}
+		path = u.metadataPath
 	}
 	data, err := json.Marshal(u.metadata)
 	if err != nil {
