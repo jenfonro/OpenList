@@ -15,12 +15,55 @@ import (
 
 // UploadMetadata keeps hash info for a cached temp file.
 type UploadMetadata struct {
-	Size       int64    `json:"size"`
-	SliceSize  int64    `json:"slice_size"`
-	ContentMD5 string   `json:"content_md5"`
-	SliceMD5   string   `json:"slice_md5"`
-	BlockList  []string `json:"block_list"`
-	UploadURL  string   `json:"upload_url"`
+	Size       int64             `json:"size"`
+	SliceSize  int64             `json:"slice_size"`
+	ContentMD5 string            `json:"content_md5"`
+	SliceMD5   string            `json:"slice_md5"`
+	BlockList  []string          `json:"block_list"`
+	Extras     map[string]string `json:"extras,omitempty"`
+}
+
+type uploadMetadataJSON struct {
+	Size       int64             `json:"size"`
+	SliceSize  int64             `json:"slice_size"`
+	ContentMD5 string            `json:"content_md5"`
+	SliceMD5   string            `json:"slice_md5"`
+	BlockList  []string          `json:"block_list"`
+	Extras     map[string]string `json:"extras,omitempty"`
+	UploadURL  string            `json:"upload_url,omitempty"`
+	FileSHA1   string            `json:"file_sha1,omitempty"`
+}
+
+func (m UploadMetadata) MarshalJSON() ([]byte, error) {
+	aux := uploadMetadataJSON{
+		Size:       m.Size,
+		SliceSize:  m.SliceSize,
+		ContentMD5: m.ContentMD5,
+		SliceMD5:   m.SliceMD5,
+		BlockList:  m.BlockList,
+		Extras:     m.Extras,
+	}
+	return json.Marshal(aux)
+}
+
+func (m *UploadMetadata) UnmarshalJSON(data []byte) error {
+	var aux uploadMetadataJSON
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	m.Size = aux.Size
+	m.SliceSize = aux.SliceSize
+	m.ContentMD5 = aux.ContentMD5
+	m.SliceMD5 = aux.SliceMD5
+	m.BlockList = aux.BlockList
+	m.Extras = aux.Extras
+	if aux.UploadURL != "" {
+		m.SetExtra("upload_url", aux.UploadURL)
+	}
+	if aux.FileSHA1 != "" {
+		m.SetExtra("file_sha1", aux.FileSHA1)
+	}
+	return nil
 }
 
 // UploadCache carries temp file information between task retries and drivers.
@@ -31,6 +74,7 @@ type UploadCache struct {
 	metadata     *UploadMetadata
 	metadataPath string
 	mu           sync.RWMutex
+	retainMeta   bool
 }
 
 // NewUploadCache creates a cache holder with an optional existing cached file path.
@@ -189,14 +233,47 @@ func cloneMetadata(meta *UploadMetadata) *UploadMetadata {
 	}
 	bl := make([]string, len(meta.BlockList))
 	copy(bl, meta.BlockList)
+	var extras map[string]string
+	if len(meta.Extras) > 0 {
+		extras = make(map[string]string, len(meta.Extras))
+		for k, v := range meta.Extras {
+			extras[k] = v
+		}
+	}
 	return &UploadMetadata{
 		Size:       meta.Size,
 		SliceSize:  meta.SliceSize,
 		ContentMD5: meta.ContentMD5,
 		SliceMD5:   meta.SliceMD5,
 		BlockList:  bl,
-		UploadURL:  meta.UploadURL,
+		Extras:     extras,
 	}
+}
+
+func (m *UploadMetadata) SetExtra(key, value string) {
+	if key == "" {
+		return
+	}
+	if value == "" {
+		if m.Extras != nil {
+			delete(m.Extras, key)
+			if len(m.Extras) == 0 {
+				m.Extras = nil
+			}
+		}
+		return
+	}
+	if m.Extras == nil {
+		m.Extras = make(map[string]string)
+	}
+	m.Extras[key] = value
+}
+
+func (m *UploadMetadata) GetExtra(key string) string {
+	if m == nil || key == "" {
+		return ""
+	}
+	return m.Extras[key]
 }
 
 // LoadMetadata loads metadata from disk into memory if not yet present.
@@ -266,6 +343,20 @@ func RemoveMetadataByPath(path string) {
 		return
 	}
 	_ = os.Remove(MetadataPathFor(path))
+}
+
+// MarkRetainMetadata marks the metadata to persist even after task failures.
+func (u *UploadCache) MarkRetainMetadata() {
+	u.mu.Lock()
+	u.retainMeta = true
+	u.mu.Unlock()
+}
+
+// ShouldRetainMetadata reports whether metadata should persist after failures.
+func (u *UploadCache) ShouldRetainMetadata() bool {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	return u.retainMeta
 }
 
 // RemoveMetadataFileAt deletes the metadata file at the provided path.

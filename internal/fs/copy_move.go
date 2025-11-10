@@ -44,6 +44,7 @@ type FileTransferTask struct {
 	groupID       string
 	cachedTmpFile string
 	metaKey       string
+	retainMeta    bool
 	retryCount    int
 	maxRetry      int
 }
@@ -108,6 +109,9 @@ func (t *FileTransferTask) OnSucceeded() {
 func (t *FileTransferTask) OnFailed() {
 	if !t.hasPendingRetry() {
 		t.clearCachedTmpFile()
+		if !t.retainMeta {
+			cache.RemoveMetadataFileAt(t.metadataPath())
+		}
 	}
 	task_group.TransferCoordinator.Done(t.groupID, false)
 }
@@ -342,6 +346,11 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 			cache.RemoveMetadataFileAt(t.metadataPath())
 		}
 		t.clearCachedTmpFile()
+	}
+	if uploadCache != nil {
+		t.retainMeta = uploadCache.ShouldRetainMetadata()
+	} else {
+		t.retainMeta = false
 	}
 
 	return uploadErr

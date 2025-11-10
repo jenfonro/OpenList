@@ -50,6 +50,8 @@ type uploadURLCacheEntry struct {
 
 var ErrUploadIDExpired = errors.New("uploadid expired")
 
+const baiduMetaUploadURLKey = "baidu_upload_url"
+
 type uploadProgress struct {
 	Resp      *PrecreateResp
 	UploadURL string
@@ -227,6 +229,9 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 	}
 
 	uploadCache := cachepkg.UploadCacheFromContext(ctx)
+	if uploadCache != nil {
+		uploadCache.MarkRetainMetadata()
+	}
 	var (
 		cache      = stream.GetFile()
 		tmpF       *os.File
@@ -307,7 +312,7 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 				blockList = append([]string(nil), meta.BlockList...)
 				contentMd5 = meta.ContentMD5
 				sliceMd5 = meta.SliceMD5
-				cachedUploadURL = meta.UploadURL
+				cachedUploadURL = meta.GetExtra(baiduMetaUploadURLKey)
 			} else {
 				log.Warn("[baidu_netdisk] upload metadata mismatch, will recalculate hashes")
 				if err := uploadCache.SaveMetadata(nil); err != nil {
@@ -434,10 +439,10 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 		if url == "" || uploadCache == nil || cachedMeta == nil {
 			return
 		}
-		if cachedMeta.UploadURL == url {
+		if cachedMeta.GetExtra(baiduMetaUploadURLKey) == url {
 			return
 		}
-		cachedMeta.UploadURL = url
+		cachedMeta.SetExtra(baiduMetaUploadURLKey, url)
 		if err := uploadCache.SaveMetadata(cachedMeta); err != nil {
 			log.Warnf("[baidu_netdisk] failed to update upload metadata url: %v", err)
 		}
