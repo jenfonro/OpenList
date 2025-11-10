@@ -13,7 +13,6 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 )
 
-// UploadMetadata keeps hash info for a cached temp file.
 type UploadMetadata struct {
 	Size       int64             `json:"size"`
 	SliceSize  int64             `json:"slice_size"`
@@ -66,7 +65,6 @@ func (m *UploadMetadata) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UploadCache carries temp file information between task retries and drivers.
 type UploadCache struct {
 	cachedPath   string
 	tempFile     string
@@ -104,14 +102,12 @@ func WithMetadataKey(key string) UploadCacheOption {
 	}
 }
 
-// CachedPath returns the reusable cached file path if present.
 func (u *UploadCache) CachedPath() string {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.cachedPath
 }
 
-// SetCachedPath updates the cached file path (used when a new cache is established).
 func (u *UploadCache) SetCachedPath(path string) {
 	if path == "" {
 		return
@@ -122,7 +118,6 @@ func (u *UploadCache) SetCachedPath(path string) {
 	u.mu.Unlock()
 }
 
-// RegisterTemp records a temporary file generated during upload.
 func (u *UploadCache) RegisterTemp(path string) {
 	if path == "" {
 		return
@@ -133,14 +128,12 @@ func (u *UploadCache) RegisterTemp(path string) {
 	u.mu.Unlock()
 }
 
-// TempFile returns the last registered temporary file path.
 func (u *UploadCache) TempFile() string {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	return u.tempFile
 }
 
-// CurrentPath returns the path associated with this cache (temp if present, otherwise cached).
 func (u *UploadCache) CurrentPath() string {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
@@ -154,7 +147,6 @@ func (u *UploadCache) currentPathLocked() string {
 	return u.cachedPath
 }
 
-// MarkKeep marks the given path to be preserved after the current attempt.
 func (u *UploadCache) MarkKeep(path string) {
 	if path == "" {
 		return
@@ -167,7 +159,6 @@ func (u *UploadCache) MarkKeep(path string) {
 	u.mu.Unlock()
 }
 
-// ShouldKeep reports whether the specified path should be preserved.
 func (u *UploadCache) ShouldKeep(path string) bool {
 	if path == "" {
 		return false
