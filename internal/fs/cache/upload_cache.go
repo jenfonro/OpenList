@@ -3,9 +3,12 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 )
@@ -17,24 +20,44 @@ type UploadMetadata struct {
 	ContentMD5 string   `json:"content_md5"`
 	SliceMD5   string   `json:"slice_md5"`
 	BlockList  []string `json:"block_list"`
+	UploadURL  string   `json:"upload_url"`
 }
 
 // UploadCache carries temp file information between task retries and drivers.
 type UploadCache struct {
-	cachedPath string
-	tempFile   string
-	keep       map[string]struct{}
-	metadata   *UploadMetadata
-	mu         sync.RWMutex
+	cachedPath   string
+	tempFile     string
+	keep         map[string]struct{}
+	metadata     *UploadMetadata
+	metadataPath string
+	mu           sync.RWMutex
 }
 
 // NewUploadCache creates a cache holder with an optional existing cached file path.
-func NewUploadCache(path string) *UploadCache {
+func NewUploadCache(path string, opts ...UploadCacheOption) *UploadCache {
 	uc := &UploadCache{}
 	if path != "" {
 		uc.cachedPath = normalizePath(path)
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(uc)
+		}
+	}
 	return uc
+}
+
+// UploadCacheOption configures UploadCache creation.
+type UploadCacheOption func(*UploadCache)
+
+// WithMetadataKey configures UploadCache to persist metadata using the provided key.
+func WithMetadataKey(key string) UploadCacheOption {
+	return func(u *UploadCache) {
+		if key == "" {
+			return
+		}
+		u.metadataPath = metadataPathForKey(key)
+	}
 }
 
 // CachedPath returns the reusable cached file path if present.
@@ -125,6 +148,9 @@ func normalizePath(path string) string {
 }
 
 func (u *UploadCache) metadataPathLocked() string {
+	if u.metadataPath != "" {
+		return u.metadataPath
+	}
 	path := u.currentPathLocked()
 	if path == "" {
 		return ""
@@ -169,6 +195,7 @@ func cloneMetadata(meta *UploadMetadata) *UploadMetadata {
 		ContentMD5: meta.ContentMD5,
 		SliceMD5:   meta.SliceMD5,
 		BlockList:  bl,
+		UploadURL:  meta.UploadURL,
 	}
 }
 
@@ -241,6 +268,46 @@ func RemoveMetadataByPath(path string) {
 	_ = os.Remove(MetadataPathFor(path))
 }
 
+// RemoveMetadataFileAt deletes the metadata file at the provided path.
+func RemoveMetadataFileAt(path string) {
+	if path == "" {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// MetadataPathForKey returns the metadata file path derived from the provided key.
+func MetadataPathForKey(key string) string {
+	return metadataPathForKey(key)
+}
+
+func metadataPathForKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		key = fmt.Sprintf("anon-%d", time.Now().UnixNano())
+	}
+	var b strings.Builder
+	for _, r := range key {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		switch r {
+		case '-', '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	safe := b.String()
+	if safe == "" {
+		safe = fmt.Sprintf("anon-%d", time.Now().UnixNano())
+	}
+	return filepath.Join(conf.Conf.TempDir, fmt.Sprintf("upload-%s.meta", safe))
+}
+
 // UploadCacheFromContext extracts the UploadCache pointer from the provided context, if any.
 func UploadCacheFromContext(ctx context.Context) *UploadCache {
 	if ctx == nil {
@@ -251,5 +318,3 @@ func UploadCacheFromContext(ctx context.Context) *UploadCache {
 	}
 	return nil
 }
-
-

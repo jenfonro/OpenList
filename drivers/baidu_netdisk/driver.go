@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	stdpath "path"
@@ -36,14 +37,23 @@ type BaiduNetdisk struct {
 	uploadThread int
 	vipType      int // 会员类型，0普通用户(4G/4M)、1普通会员(10G/16M)、2超级会员(20G/32M)
 
-	upClient            *resty.Client // 上传文件使用的http客户端
-	uploadUrlG          singleflight.Group[string]
-	uploadUrlMu         sync.RWMutex
-	uploadUrl           string    // 上传域名
-	uploadUrlUpdateTime time.Time // 上传域名上次更新时间
+	upClient       *resty.Client // 上传文件使用的http客户端
+	uploadUrlG     singleflight.Group[string]
+	uploadUrlMu    sync.RWMutex
+	uploadUrlCache map[string]uploadURLCacheEntry
+}
+
+type uploadURLCacheEntry struct {
+	url        string
+	updateTime time.Time
 }
 
 var ErrUploadIDExpired = errors.New("uploadid expired")
+
+type uploadProgress struct {
+	Resp      *PrecreateResp
+	UploadURL string
+}
 
 func (d *BaiduNetdisk) Config() driver.Config {
 	return config
@@ -59,6 +69,7 @@ func (d *BaiduNetdisk) Init(ctx context.Context) error {
 		SetRetryCount(UPLOAD_RETRY_COUNT).
 		SetRetryWaitTime(UPLOAD_RETRY_WAIT_TIME).
 		SetRetryMaxWaitTime(UPLOAD_RETRY_MAX_WAIT_TIME)
+	d.uploadUrlCache = make(map[string]uploadURLCacheEntry)
 	d.uploadThread, _ = strconv.Atoi(d.UploadThread)
 	if d.uploadThread < 1 {
 		d.uploadThread, d.UploadThread = 1, "1"
@@ -201,44 +212,45 @@ func (d *BaiduNetdisk) PutRapid(ctx context.Context, dstDir model.Obj, stream mo
 // 而实际上云盘存储的时间是文件时间，所以此处需要覆盖时间，保证缓存与云盘的数据一致
 func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) (model.Obj, error) {
 	// 百度网盘不允许上传空文件
-	if stream.GetSize() < 1 {
-		return nil, ErrBaiduEmptyFilesNotAllowed
-	}
-
-	// rapid upload
-	if newObj, err := d.PutRapid(ctx, dstDir, stream); err == nil {
-		return newObj, nil
-	}
-
-	uploadCache := cachepkg.UploadCacheFromContext(ctx)
-	var (
-		cacheFile = stream.GetFile()
-		tmpF      *os.File
-		err       error
-		keepTemp  bool
-		putErr    error
-	)
+	var putErr error
 	setResult := func(res model.Obj, err error) (model.Obj, error) {
 		putErr = err
 		return res, err
 	}
-	if _, ok := cacheFile.(io.ReaderAt); !ok {
+	if stream.GetSize() < 1 {
+		return setResult(nil, ErrBaiduEmptyFilesNotAllowed)
+	}
+
+	// rapid upload
+	if newObj, err := d.PutRapid(ctx, dstDir, stream); err == nil {
+		return setResult(newObj, nil)
+	}
+
+	uploadCache := cachepkg.UploadCacheFromContext(ctx)
+	var (
+		cache      = stream.GetFile()
+		tmpF       *os.File
+		err        error
+		metaUsed   bool
+		cachedMeta *cachepkg.UploadMetadata
+		cleanupTmp = uploadCache == nil
+		keepTemp   bool
+	)
+	if _, ok := cache.(io.ReaderAt); !ok {
 		tmpF, err = os.CreateTemp(conf.Conf.TempDir, "file-*")
 		if err != nil {
 			return setResult(nil, err)
 		}
 		if uploadCache != nil {
 			uploadCache.RegisterTemp(tmpF.Name())
+			cleanupTmp = false
 		}
-		cacheFile = tmpF
-	}
-	defer func() {
-		if tmpF != nil {
+		defer func() {
+			_ = tmpF.Close()
 			if uploadCache != nil && keepTemp && putErr != nil {
 				uploadCache.MarkKeep(tmpF.Name())
 			}
-			_ = tmpF.Close()
-			if uploadCache == nil || !uploadCache.ShouldKeep(tmpF.Name()) {
+			if cleanupTmp && (uploadCache == nil || !uploadCache.ShouldKeep(tmpF.Name())) {
 				if uploadCache != nil {
 					if err := uploadCache.RemoveMetadataFile(); err != nil && !os.IsNotExist(err) {
 						log.Warnf("[baidu_netdisk] failed to remove upload metadata: %v", err)
@@ -248,8 +260,9 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 				}
 				_ = os.Remove(tmpF.Name())
 			}
-		}
-	}()
+		}()
+		cache = tmpF
+	}
 
 	streamSize := stream.GetSize()
 	sliceSize := d.getSliceSize(streamSize)
@@ -262,26 +275,52 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 		lastBlockSize = sliceSize
 	}
 
-	// cal md5 for first 256k data
-	const SliceSize int64 = 256 * utils.KB
+	metaMatches := func(meta *cachepkg.UploadMetadata) bool {
+		if meta == nil {
+			return false
+		}
+		if meta.Size != streamSize || meta.SliceSize != sliceSize || len(meta.BlockList) != count {
+			return false
+		}
+		if meta.ContentMD5 == "" || meta.SliceMD5 == "" {
+			return false
+		}
+		for _, blk := range meta.BlockList {
+			if blk == "" {
+				return false
+			}
+		}
+		return true
+	}
+
 	var (
 		blockList  []string
 		contentMd5 string
 		sliceMd5   string
 	)
-	metaUsed := false
+	var cachedUploadURL string
 	if uploadCache != nil {
 		if meta, err := uploadCache.LoadMetadata(); err == nil {
-			if meta.Size == streamSize && meta.SliceSize == sliceSize && len(meta.BlockList) == count {
+			if metaMatches(meta) {
+				metaUsed = true
+				cachedMeta = meta
 				blockList = append([]string(nil), meta.BlockList...)
 				contentMd5 = meta.ContentMD5
 				sliceMd5 = meta.SliceMD5
-				metaUsed = true
+				cachedUploadURL = meta.UploadURL
+			} else {
+				log.Warn("[baidu_netdisk] upload metadata mismatch, will recalculate hashes")
+				if err := uploadCache.SaveMetadata(nil); err != nil {
+					log.Warnf("[baidu_netdisk] failed to clear upload metadata: %v", err)
+				}
 			}
 		} else if err != nil && !os.IsNotExist(err) {
 			log.Warnf("[baidu_netdisk] failed to load upload metadata: %v", err)
 		}
 	}
+
+	// cal md5 for first 256k data
+	const SliceSize int64 = 256 * utils.KB
 	if !metaUsed {
 		blockList = make([]string, 0, count)
 		byteSize := sliceSize
@@ -330,18 +369,50 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 				SliceMD5:   sliceMd5,
 				BlockList:  append([]string(nil), blockList...),
 			}
+			cachedMeta = meta
 			if err := uploadCache.SaveMetadata(meta); err != nil {
 				log.Warnf("[baidu_netdisk] failed to save upload metadata: %v", err)
 			}
 		}
+	} else if tmpF != nil {
+		written, err := utils.CopyWithBuffer(tmpF, stream)
+		if err != nil && err != io.EOF {
+			return setResult(nil, err)
+		}
+		if written != streamSize {
+			return setResult(nil, errs.NewErr(err, "CreateTempFile failed, size mismatch: %d != %d ", written, streamSize))
+		}
+		if _, err := tmpF.Seek(0, io.SeekStart); err != nil {
+			return setResult(nil, errs.NewErr(err, "CreateTempFile failed, can't seek to 0 "))
+		}
+		keepTemp = true
+		blockList = append([]string(nil), cachedMeta.BlockList...)
+		contentMd5 = cachedMeta.ContentMD5
+		sliceMd5 = cachedMeta.SliceMD5
+	} else if cachedMeta != nil {
+		blockList = append([]string(nil), cachedMeta.BlockList...)
+		contentMd5 = cachedMeta.ContentMD5
+		sliceMd5 = cachedMeta.SliceMD5
 	}
 	blockListStr, _ := utils.Json.MarshalToString(blockList)
 	path := stdpath.Join(dstDir.GetPath(), stream.GetName())
 	mtime := stream.ModTime().Unix()
 	ctime := stream.CreateTime().Unix()
 
+	var uploadUrl string
+	if cachedUploadURL != "" {
+		uploadUrl = cachedUploadURL
+	}
 	// step.1 尝试读取已保存进度
-	precreateResp, ok := base.GetUploadProgress[*PrecreateResp](d, d.AccessToken, contentMd5)
+	progress, ok := base.GetUploadProgress[*uploadProgress](d, d.AccessToken, contentMd5)
+	var precreateResp *PrecreateResp
+	if ok && progress != nil {
+		precreateResp = progress.Resp
+		if progress.UploadURL != "" {
+			uploadUrl = progress.UploadURL
+		}
+		ok = precreateResp != nil
+	}
 	if !ok {
 		// 没有进度，走预上传
 		precreateResp, err = d.precreate(ctx, path, streamSize, blockListStr, contentMd5, sliceMd5, ctime, mtime)
@@ -356,19 +427,46 @@ func (d *BaiduNetdisk) Put(ctx context.Context, dstDir model.Obj, stream model.F
 			return setResult(fileToObj(precreateResp.File), nil)
 		}
 	}
+	if uploadUrl != "" {
+		precreateResp.UploadURL = uploadUrl
+	}
+	persistUploadURL := func(url string) {
+		if url == "" || uploadCache == nil || cachedMeta == nil {
+			return
+		}
+		if cachedMeta.UploadURL == url {
+			return
+		}
+		cachedMeta.UploadURL = url
+		if err := uploadCache.SaveMetadata(cachedMeta); err != nil {
+			log.Warnf("[baidu_netdisk] failed to update upload metadata url: %v", err)
+		}
+	}
+	ensureUploadURL := func() {
+		if uploadUrl != "" {
+			precreateResp.UploadURL = uploadUrl
+			return
+		}
+		uploadUrl = d.getUploadUrl(path, precreateResp.Uploadid)
+		precreateResp.UploadURL = uploadUrl
+		persistUploadURL(uploadUrl)
+	}
+	ensureUploadURL()
 
 	// step.2 上传分片
 uploadLoop:
 	for attempt := 0; attempt < 2; attempt++ {
 		// 获取上传域名
-		uploadUrl := d.getUploadUrl(path, precreateResp.Uploadid)
+		if uploadUrl == "" {
+			ensureUploadURL()
+		}
 		// 并发上传
 		threadG, upCtx := errgroup.NewGroupWithContext(ctx, d.uploadThread,
 			retry.Attempts(1),
 			retry.Delay(time.Second),
 			retry.DelayType(retry.BackOffDelay))
 
-		cacheReaderAt, okReaderAt := cacheFile.(io.ReaderAt)
+		cacheReaderAt, okReaderAt := cache.(io.ReaderAt)
 		if !okReaderAt {
 			return setResult(nil, fmt.Errorf("cache object must implement io.ReaderAt interface for upload operations"))
 		}
@@ -414,24 +512,28 @@ uploadLoop:
 
 		// 保存进度（所有错误都会保存）
 		precreateResp.BlockList = utils.SliceFilter(precreateResp.BlockList, func(s int) bool { return s >= 0 })
-		base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
+		base.SaveUploadProgress(d, &uploadProgress{Resp: precreateResp, UploadURL: uploadUrl}, d.AccessToken, contentMd5)
 
 		if errors.Is(err, context.Canceled) {
-			return setResult(nil, err)
+			return nil, err
 		}
 		if errors.Is(err, ErrUploadIDExpired) {
 			log.Warn("[baidu_netdisk] uploadid expired, will restart from scratch")
+			d.clearUploadUrlCache(precreateResp.Uploadid)
 			// 重新 precreate（所有分片都要重传）
 			newPre, err2 := d.precreate(ctx, path, streamSize, blockListStr, "", "", ctime, mtime)
 			if err2 != nil {
-				return setResult(nil, err2)
+				return nil, err2
 			}
 			if newPre.ReturnType == 2 {
-				return setResult(fileToObj(newPre.File), nil)
+				return fileToObj(newPre.File), nil
 			}
 			precreateResp = newPre
+			uploadUrl = ""
+			precreateResp.UploadURL = ""
+			ensureUploadURL()
 			// 覆盖掉旧的进度
-			base.SaveUploadProgress(d, precreateResp, d.AccessToken, contentMd5)
+			base.SaveUploadProgress(d, &uploadProgress{Resp: precreateResp, UploadURL: uploadUrl}, d.AccessToken, contentMd5)
 			continue uploadLoop
 		}
 		return setResult(nil, err)
@@ -448,6 +550,7 @@ uploadLoop:
 	newFile.Mtime = mtime
 	// 上传成功清理进度
 	base.SaveUploadProgress(d, nil, d.AccessToken, contentMd5)
+	d.clearUploadUrlCache(precreateResp.Uploadid)
 	return setResult(fileToObj(newFile), nil)
 }
 
@@ -496,6 +599,9 @@ func (d *BaiduNetdisk) uploadSlice(ctx context.Context, uploadUrl string, params
 		return err
 	}
 	log.Debugln(res.RawResponse.Status + res.String())
+	if res.StatusCode() != http.StatusOK {
+		return errs.NewErr(errs.StreamIncomplete, "baidu upload failed, status=%d, body=%s", res.StatusCode(), res.String())
+	}
 	errCode := utils.Json.Get(res.Body(), "error_code").ToInt()
 	errNo := utils.Json.Get(res.Body(), "errno").ToInt()
 	respStr := res.String()
