@@ -2,6 +2,9 @@ package handles
 
 import (
 	"math"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -125,6 +128,62 @@ func getBatchHandler[T task.TaskExtensionInfo](manager task.Manager[T], callback
 }
 
 func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manager[T]) {
+	parsePage := func(c *gin.Context) (page, size int) {
+		page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+		if page < 1 {
+			page = 1
+		}
+		size = 20 // fixed page size
+		return
+	}
+
+	filterAndSort := func(tasks []T, isAdmin bool, uid uint, mine bool, keyword string) []TaskInfo {
+		// apply user filter on the provided slice (state filtering is already done by caller)
+		filtered := make([]T, 0, len(tasks))
+		for _, t := range tasks {
+			creator := t.GetCreator()
+			if !isAdmin {
+				if creator != nil && uid == creator.ID {
+					filtered = append(filtered, t)
+				}
+				continue
+			}
+			if mine {
+				if creator != nil && uid == creator.ID {
+					filtered = append(filtered, t)
+				}
+			} else {
+				filtered = append(filtered, t)
+			}
+		}
+
+		infos := getTaskInfos(filtered)
+		if keyword != "" {
+			k := strings.ToLower(keyword)
+			filtered := make([]TaskInfo, 0, len(infos))
+			for _, info := range infos {
+				if strings.Contains(strings.ToLower(info.Name), k) {
+					filtered = append(filtered, info)
+				}
+			}
+			infos = filtered
+		}
+		sort.SliceStable(infos, func(i, j int) bool {
+			ti, tj := infos[i].StartTime, infos[j].StartTime
+			if ti == nil && tj == nil {
+				return infos[i].ID > infos[j].ID
+			}
+			if ti == nil {
+				return false
+			}
+			if tj == nil {
+				return true
+			}
+			return ti.After(*tj)
+		})
+		return infos
+	}
+
 	g.GET("/undone", func(c *gin.Context) {
 		isAdmin, uid, ok := getUserInfo(c)
 		if !ok {
@@ -132,12 +191,20 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 			common.ErrorStrResp(c, "user invalid", 401)
 			return
 		}
-		common.SuccessResp(c, getTaskInfos(manager.GetByCondition(func(task T) bool {
-			// avoid directly passing the user object into the function to reduce closure size
-			return (isAdmin || uid == task.GetCreator().ID) &&
-				argsContains(task.GetState(), tache.StatePending, tache.StateRunning, tache.StateCanceling,
-					tache.StateErrored, tache.StateFailing, tache.StateWaitingRetry, tache.StateBeforeRetry)
-		})))
+		page, size := parsePage(c)
+		keyword := c.Query("keyword")
+		mine := c.DefaultQuery("mine", "false") == "true"
+		infos := filterAndSort(manager.GetByCondition(func(task T) bool {
+			return argsContains(task.GetState(), tache.StatePending, tache.StateRunning, tache.StateCanceling,
+				tache.StateErrored, tache.StateFailing, tache.StateWaitingRetry, tache.StateBeforeRetry)
+		}), isAdmin, uid, mine, keyword)
+		total := len(infos)
+		start := (page - 1) * size
+		if start > total {
+			start = total
+		}
+		end := int(math.Min(float64(start+size), float64(total)))
+		common.SuccessResp(c, gin.H{"total": total, "tasks": infos[start:end]})
 	})
 	g.GET("/done", func(c *gin.Context) {
 		isAdmin, uid, ok := getUserInfo(c)
@@ -146,10 +213,19 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 			common.ErrorStrResp(c, "user invalid", 401)
 			return
 		}
-		common.SuccessResp(c, getTaskInfos(manager.GetByCondition(func(task T) bool {
-			return (isAdmin || uid == task.GetCreator().ID) &&
-				argsContains(task.GetState(), tache.StateCanceled, tache.StateFailed, tache.StateSucceeded)
-		})))
+		page, size := parsePage(c)
+		keyword := c.Query("keyword")
+		mine := c.DefaultQuery("mine", "false") == "true"
+		infos := filterAndSort(manager.GetByCondition(func(task T) bool {
+			return argsContains(task.GetState(), tache.StateCanceled, tache.StateFailed, tache.StateSucceeded)
+		}), isAdmin, uid, mine, keyword)
+		total := len(infos)
+		start := (page - 1) * size
+		if start > total {
+			start = total
+		}
+		end := int(math.Min(float64(start+size), float64(total)))
+		common.SuccessResp(c, gin.H{"total": total, "tasks": infos[start:end]})
 	})
 	g.POST("/info", getTargetedHandler(manager, func(c *gin.Context, task T) {
 		common.SuccessResp(c, getTaskInfo(task))

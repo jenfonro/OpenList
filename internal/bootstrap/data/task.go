@@ -12,9 +12,10 @@ func initTasks() {
 
 	for i := range initialTaskItems {
 		item := &initialTaskItems[i]
-		taskitem, _ := db.GetTaskDataByType(item.Key)
+		// legacy table kept for backward compatibility; ignore if missing
+		taskitem, _ := db.GetTaskItemByType(item.Key)
 		if taskitem == nil {
-			db.CreateTaskData(item)
+			db.CreateTaskItem(item)
 		}
 	}
 }
