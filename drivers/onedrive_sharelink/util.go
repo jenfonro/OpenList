@@ -137,9 +137,6 @@ func (d *OnedriveSharelink) getHeaders(ctx context.Context) (http.Header, error)
 	header.Set("User-Agent", base.UserAgent)
 	header.Set("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6")
 
-	// Save current timestamp to d.HeaderTime
-	d.HeaderTime = time.Now().Unix()
-
 	if d.ShareLinkPassword == "" {
 		// Create a no-redirect client
 		clientNoDirect := NewNoRedirectCLient()
@@ -199,7 +196,10 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 		}
 		redirectUrl = answerNoRedirect.Header.Get("Location")
 	} else {
-		header = d.Headers
+		header, err = d.getValidHeaders(ctx)
+		if err != nil {
+			return nil, err
+		}
 		req.Header = header
 		answerNoRedirect, err := clientNoDirect.Do(req)
 		if err != nil {
@@ -208,7 +208,10 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 		redirectUrl = answerNoRedirect.Header.Get("Location")
 	}
 	redirectSplitURL := strings.Split(redirectUrl, "/")
-	req.Header = d.Headers
+	req.Header = d.headerSnapshot()
+	if req.Header == nil {
+		req.Header = http.Header{}
+	}
 	downloadLinkPrefix := ""
 	rootFolderPre := ""
 
@@ -222,9 +225,9 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 		// Get redirectUrl
 		answer, err := clientNoDirect.Do(req)
 		if err != nil {
-			d.Headers, err = d.getHeaders(ctx)
-			if err != nil {
-				return nil, err
+			h, err2 := d.refreshHeaders(ctx)
+			if err2 != nil {
+				return nil, err2
 			}
 			return d.getFiles(ctx, path)
 		}
@@ -283,9 +286,9 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 
 	// Construct the GraphQL query with the encoded paths
 	graphqlVar := fmt.Sprintf(`{"query":"query (\n        $listServerRelativeUrl: String!,$renderListDataAsStreamParameters: RenderListDataAsStreamParameters!,$renderListDataAsStreamQueryString: String!\n        )\n      {\n      \n      legacy {\n      \n      renderListDataAsStream(\n      listServerRelativeUrl: $listServerRelativeUrl,\n      parameters: $renderListDataAsStreamParameters,\n      queryString: $renderListDataAsStreamQueryString\n      )\n    }\n      \n      \n  perf {\n    executionTime\n    overheadTime\n    parsingTime\n    queryCount\n    validationTime\n    resolvers {\n      name\n      queryCount\n      resolveTime\n      waitTime\n    }\n  }\n    }","variables":{"listServerRelativeUrl":"%s","renderListDataAsStreamParameters":{"renderOptions":5707527,"allowMultipleValueFilterForTaxonomyFields":true,"addRequiredFields":true,"folderServerRelativeUrl":"%s"},"renderListDataAsStreamQueryString":"@a1=\'%s\'&RootFolder=%s&TryNewExperienceSingle=TRUE"}}`, relativePath, rootFolder, relativeUrl, rootFolderUrl)
-	tempHeader := make(http.Header)
-	for k, v := range d.Headers {
-		tempHeader[k] = v
+	tempHeader := d.headerSnapshot()
+	if tempHeader == nil {
+		tempHeader = make(http.Header)
 	}
 	tempHeader["Content-Type"] = []string{"application/json;odata=verbose"}
 
@@ -299,9 +302,8 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		d.Headers, err = d.getHeaders(ctx)
-		if err != nil {
-			return nil, err
+		if _, err2 := d.refreshHeaders(ctx); err2 != nil {
+			return nil, err2
 		}
 		return d.getFiles(ctx, path)
 	}
@@ -329,9 +331,8 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 
 		resp, err := client.Do(req)
 		if err != nil {
-			d.Headers, err = d.getHeaders(ctx)
-			if err != nil {
-				return nil, err
+			if _, err2 := d.refreshHeaders(ctx); err2 != nil {
+				return nil, err2
 			}
 			return d.getFiles(ctx, path)
 		}
@@ -344,9 +345,8 @@ func (d *OnedriveSharelink) getFiles(ctx context.Context, path string) ([]Item, 
 			req.Header = tempHeader
 			resp, err := client.Do(req)
 			if err != nil {
-				d.Headers, err = d.getHeaders(ctx)
-				if err != nil {
-					return nil, err
+				if _, err2 := d.refreshHeaders(ctx); err2 != nil {
+					return nil, err2
 				}
 				return d.getFiles(ctx, path)
 			}
