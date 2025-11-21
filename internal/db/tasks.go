@@ -46,17 +46,13 @@ func GetTaskDataFunc(type_s string, enabled bool) func() ([]byte, error) {
 	}
 }
 
-// Legacy helpers for old TaskItem table (kept minimal for initTasks)
-func GetTaskItemByType(type_s string) (*model.TaskItem, error) {
-	task := model.TaskItem{Key: type_s}
-	if err := db.Where(task).First(&task).Error; err != nil {
-		return nil, errors.Wrapf(err, "failed find task")
+// ClearTaskPersist removes persisted tasks of the given type (or all if type_s empty)
+func ClearTaskPersist(type_s string) error {
+	q := db
+	if type_s != "" {
+		q = q.Where("key = ?", type_s)
 	}
-	return &task, nil
-}
-
-func CreateTaskItem(t *model.TaskItem) error {
-	return errors.WithStack(db.Create(t).Error)
+	return q.Delete(&model.TaskPersist{}).Error
 }
 
 // UpdateTaskDataFunc upserts task rows per type; snapshot replace strategy.

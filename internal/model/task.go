@@ -2,11 +2,6 @@ package model
 
 import "time"
 
-type TaskItem struct {
-	Key         string `json:"key"`
-	PersistData string `gorm:"type:text" json:"persist_data"`
-}
-
 // TaskPersist stores each task snapshot independently to avoid giant JSON blobs.
 // Key distinguishes task type (copy/move/upload...), TaskID is the manager task ID.
 type TaskPersist struct {

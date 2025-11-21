@@ -130,10 +130,28 @@ func getBatchHandler[T task.TaskExtensionInfo](manager task.Manager[T], callback
 func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manager[T]) {
 	parsePage := func(c *gin.Context) (page, size int) {
 		page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
+		if c.Request.Method == http.MethodPost && strings.HasPrefix(c.ContentType(), "application/json") {
+			var body struct {
+				Page int `json:"page"`
+				Size int `json:"size"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			if body.Page > 0 {
+				page = body.Page
+			}
+			size = body.Size
+		} else {
+			size, _ = strconv.Atoi(c.DefaultQuery("size", "20"))
+		}
 		if page < 1 {
 			page = 1
 		}
-		size = 20 // fixed page size
+		if size < 1 {
+			size = 1
+		}
+		if size > 500 {
+			size = 500
+		}
 		return
 	}
 
@@ -204,7 +222,13 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 			start = total
 		}
 		end := int(math.Min(float64(start+size), float64(total)))
-		common.SuccessResp(c, gin.H{"total": total, "tasks": infos[start:end]})
+		pages := int(math.Ceil(float64(total) / float64(size)))
+		common.SuccessResp(c, gin.H{
+			"total":     total,
+			"pages":     pages,
+			"page_size": size,
+			"tasks":     infos[start:end],
+		})
 	})
 	g.GET("/done", func(c *gin.Context) {
 		isAdmin, uid, ok := getUserInfo(c)
@@ -225,7 +249,13 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 			start = total
 		}
 		end := int(math.Min(float64(start+size), float64(total)))
-		common.SuccessResp(c, gin.H{"total": total, "tasks": infos[start:end]})
+		pages := int(math.Ceil(float64(total) / float64(size)))
+		common.SuccessResp(c, gin.H{
+			"total":     total,
+			"pages":     pages,
+			"page_size": size,
+			"tasks":     infos[start:end],
+		})
 	})
 	g.POST("/info", getTargetedHandler(manager, func(c *gin.Context, task T) {
 		common.SuccessResp(c, getTaskInfo(task))

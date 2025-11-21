@@ -74,6 +74,7 @@ type TasksConfig struct {
 	Decompress         TaskConfig `json:"decompress" envPrefix:"DECOMPRESS_"`
 	DecompressUpload   TaskConfig `json:"decompress_upload" envPrefix:"DECOMPRESS_UPLOAD_"`
 	AllowRetryCanceled bool       `json:"allow_retry_canceled" env:"ALLOW_RETRY_CANCELED"`
+	MaxHistory         int        `json:"max_history" env:"TASKS_MAX_HISTORY"`
 }
 
 type Cors struct {
