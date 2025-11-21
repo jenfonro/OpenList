@@ -138,18 +138,26 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 	}
 
 	filterAndSort := func(tasks []T, isAdmin bool, uid uint, mine bool, keyword string) []TaskInfo {
-		infos := getTaskInfos(manager.GetByCondition(func(task T) bool {
-			if task.GetCreator() == nil {
-				return isAdmin && !mine
-			}
+		// apply user filter on the provided slice (state filtering is already done by caller)
+		filtered := make([]T, 0, len(tasks))
+		for _, t := range tasks {
+			creator := t.GetCreator()
 			if !isAdmin {
-				return uid == task.GetCreator().ID
+				if creator != nil && uid == creator.ID {
+					filtered = append(filtered, t)
+				}
+				continue
 			}
 			if mine {
-				return uid == task.GetCreator().ID
+				if creator != nil && uid == creator.ID {
+					filtered = append(filtered, t)
+				}
+			} else {
+				filtered = append(filtered, t)
 			}
-			return true
-		}))
+		}
+
+		infos := getTaskInfos(filtered)
 		if keyword != "" {
 			k := strings.ToLower(keyword)
 			filtered := make([]TaskInfo, 0, len(infos))
