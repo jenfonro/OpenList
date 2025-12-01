@@ -2,6 +2,10 @@ package handles
 
 import (
 	"math"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -28,6 +32,36 @@ type TaskInfo struct {
 	EndTime     *time.Time  `json:"end_time"`
 	TotalBytes  int64       `json:"total_bytes"`
 	Error       string      `json:"error"`
+}
+
+const (
+	defaultTaskPageSize = 20
+	maxTaskPageSize     = 200
+)
+
+var undoneStates = []tache.State{
+	tache.StatePending,
+	tache.StateRunning,
+	tache.StateCanceling,
+	tache.StateErrored,
+	tache.StateFailing,
+	tache.StateWaitingRetry,
+	tache.StateBeforeRetry,
+}
+
+var doneStates = []tache.State{
+	tache.StateCanceled,
+	tache.StateFailed,
+	tache.StateSucceeded,
+}
+
+type taskListQuery struct {
+	page     int
+	pageSize int
+	orderBy  string
+	reverse  bool
+	mine     bool
+	regex    *regexp.Regexp
 }
 
 func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
@@ -67,6 +101,169 @@ func getTaskInfos[T task.TaskExtensionInfo](tasks []T) []TaskInfo {
 
 func argsContains[T comparable](v T, slice ...T) bool {
 	return utils.SliceContains(slice, v)
+}
+
+func parseTaskListQuery(c *gin.Context) (taskListQuery, error) {
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultTaskPageSize)))
+	if err != nil || pageSize <= 0 {
+		pageSize = defaultTaskPageSize
+	}
+	if pageSize > maxTaskPageSize {
+		pageSize = maxTaskPageSize
+	}
+	orderBy := strings.ToLower(c.DefaultQuery("order_by", "name"))
+	switch orderBy {
+	case "name", "creator", "state", "progress":
+	default:
+		orderBy = "name"
+	}
+	order := strings.ToLower(c.DefaultQuery("order", ""))
+	reverse := order == "desc" || order == "true"
+	mine, _ := strconv.ParseBool(c.DefaultQuery("mine", "false"))
+	var compiled *regexp.Regexp
+	if reg := c.Query("regex"); reg != "" {
+		r, err := regexp.Compile(reg)
+		if err != nil {
+			return taskListQuery{}, err
+		}
+		compiled = r
+	}
+	return taskListQuery{
+		page:     page,
+		pageSize: pageSize,
+		orderBy:  orderBy,
+		reverse:  reverse,
+		mine:     mine,
+		regex:    compiled,
+	}, nil
+}
+
+func taskProgressValue[T task.TaskExtensionInfo](task T) float64 {
+	progress := task.GetProgress()
+	if math.IsNaN(progress) {
+		return 100
+	}
+	return progress
+}
+
+func creatorName[T task.TaskExtensionInfo](task T) string {
+	if task.GetCreator() != nil {
+		return task.GetCreator().Username
+	}
+	return ""
+}
+
+func compareString(a, b string) int {
+	switch {
+	case a == b:
+		return 0
+	case a > b:
+		return 1
+	default:
+		return -1
+	}
+}
+
+func compareState(a, b tache.State) int {
+	switch {
+	case a == b:
+		return 0
+	case a > b:
+		return 1
+	default:
+		return -1
+	}
+}
+
+func sortTasks[T task.TaskExtensionInfo](tasks []T, orderBy string, reverse bool) {
+	sort.SliceStable(tasks, func(i, j int) bool {
+		a := tasks[i]
+		b := tasks[j]
+		var cmp int
+		switch orderBy {
+		case "creator":
+			cmp = compareString(creatorName(a), creatorName(b))
+		case "state":
+			cmp = compareState(a.GetState(), b.GetState())
+		case "progress":
+			pa := taskProgressValue(a)
+			pb := taskProgressValue(b)
+			switch {
+			case pa == pb:
+				cmp = compareString(a.GetID(), b.GetID())
+			case pa > pb:
+				cmp = -1
+			default:
+				cmp = 1
+			}
+		default:
+			cmp = compareString(a.GetName(), b.GetName())
+		}
+		if cmp == 0 {
+			cmp = compareString(a.GetID(), b.GetID())
+		}
+		if reverse {
+			cmp = -cmp
+		}
+		return cmp < 0
+	})
+}
+
+func taskListHandler[T task.TaskExtensionInfo](manager task.Manager[T], states ...tache.State) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		isAdmin, uid, ok := getUserInfo(c)
+		if !ok {
+			common.ErrorStrResp(c, "user invalid", 401)
+			return
+		}
+		query, err := parseTaskListQuery(c)
+		if err != nil {
+			common.ErrorStrResp(c, err.Error(), 400)
+			return
+		}
+		restrictOwner := query.mine || !isAdmin
+		tasks := manager.GetByCondition(func(tsk T) bool {
+			if !argsContains(tsk.GetState(), states...) {
+				return false
+			}
+			creator := tsk.GetCreator()
+			creatorID := uint(0)
+			if creator != nil {
+				creatorID = creator.ID
+			}
+			if !isAdmin && creatorID != uid {
+				return false
+			}
+			if restrictOwner && creatorID != uid {
+				return false
+			}
+			if query.regex != nil && !query.regex.MatchString(tsk.GetName()) {
+				return false
+			}
+			return true
+		})
+		sortTasks(tasks, query.orderBy, query.reverse)
+		total := len(tasks)
+		start := (query.page - 1) * query.pageSize
+		if start < 0 {
+			start = 0
+		}
+		if start > total {
+			start = total
+		}
+		end := start + query.pageSize
+		if end > total {
+			end = total
+		}
+		common.SuccessResp(c, common.PageResp{
+			Content: getTaskInfos(tasks[start:end]),
+			Total:   int64(total),
+		})
+	}
 }
 
 func getUserInfo(c *gin.Context) (bool, uint, bool) {
@@ -125,32 +322,8 @@ func getBatchHandler[T task.TaskExtensionInfo](manager task.Manager[T], callback
 }
 
 func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manager[T]) {
-	g.GET("/undone", func(c *gin.Context) {
-		isAdmin, uid, ok := getUserInfo(c)
-		if !ok {
-			// if there is no bug, here is unreachable
-			common.ErrorStrResp(c, "user invalid", 401)
-			return
-		}
-		common.SuccessResp(c, getTaskInfos(manager.GetByCondition(func(task T) bool {
-			// avoid directly passing the user object into the function to reduce closure size
-			return (isAdmin || uid == task.GetCreator().ID) &&
-				argsContains(task.GetState(), tache.StatePending, tache.StateRunning, tache.StateCanceling,
-					tache.StateErrored, tache.StateFailing, tache.StateWaitingRetry, tache.StateBeforeRetry)
-		})))
-	})
-	g.GET("/done", func(c *gin.Context) {
-		isAdmin, uid, ok := getUserInfo(c)
-		if !ok {
-			// if there is no bug, here is unreachable
-			common.ErrorStrResp(c, "user invalid", 401)
-			return
-		}
-		common.SuccessResp(c, getTaskInfos(manager.GetByCondition(func(task T) bool {
-			return (isAdmin || uid == task.GetCreator().ID) &&
-				argsContains(task.GetState(), tache.StateCanceled, tache.StateFailed, tache.StateSucceeded)
-		})))
-	})
+	g.GET("/undone", taskListHandler(manager, undoneStates...))
+	g.GET("/done", taskListHandler(manager, doneStates...))
 	g.POST("/info", getTargetedHandler(manager, func(c *gin.Context, task T) {
 		common.SuccessResp(c, getTaskInfo(task))
 	}))
