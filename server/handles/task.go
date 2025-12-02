@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/db"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/task"
 
@@ -62,6 +63,7 @@ type taskListQuery struct {
 	reverse  bool
 	mine     bool
 	regex    *regexp.Regexp
+	keyword  string
 }
 
 func getTaskInfo[T task.TaskExtensionInfo](task T) TaskInfo {
@@ -125,6 +127,7 @@ func parseTaskListQuery(c *gin.Context) (taskListQuery, error) {
 	reverse := order == "desc" || order == "true"
 	mine, _ := strconv.ParseBool(c.DefaultQuery("mine", "false"))
 	var compiled *regexp.Regexp
+	keyword := c.Query("regex")
 	if reg := c.Query("regex"); reg != "" {
 		r, err := regexp.Compile(reg)
 		if err != nil {
@@ -139,6 +142,7 @@ func parseTaskListQuery(c *gin.Context) (taskListQuery, error) {
 		reverse:  reverse,
 		mine:     mine,
 		regex:    compiled,
+		keyword:  keyword,
 	}, nil
 }
 
@@ -213,7 +217,28 @@ func sortTasks[T task.TaskExtensionInfo](tasks []T, orderBy string, reverse bool
 	})
 }
 
-func taskListHandler[T task.TaskExtensionInfo](manager task.Manager[T], states ...tache.State) gin.HandlerFunc {
+func recordsToInfos(records []model.TaskRecord) []TaskInfo {
+	infos := make([]TaskInfo, 0, len(records))
+	for i := range records {
+		r := records[i]
+		infos = append(infos, TaskInfo{
+			ID:          r.TaskID,
+			Name:        r.Name,
+			Creator:     r.Creator,
+			CreatorRole: r.CreatorRole,
+			State:       tache.State(r.State),
+			Status:      r.Status,
+			Progress:    r.Progress,
+			StartTime:   r.StartTime,
+			EndTime:     r.EndTime,
+			TotalBytes:  r.TotalBytes,
+			Error:       r.Error,
+		})
+	}
+	return infos
+}
+
+func taskListHandler[T task.TaskExtensionInfo](manager task.Manager[T], taskType string, useIndex bool, states ...tache.State) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		isAdmin, uid, ok := getUserInfo(c)
 		if !ok {
@@ -226,6 +251,22 @@ func taskListHandler[T task.TaskExtensionInfo](manager task.Manager[T], states .
 			return
 		}
 		restrictOwner := query.mine || !isAdmin
+		if useIndex && query.regex == nil {
+			creatorID := uint(0)
+			if restrictOwner {
+				creatorID = uid
+			}
+			records, total, err := db.ListTaskRecords(taskType, states, creatorID, query.keyword, query.page, query.pageSize)
+			if err != nil {
+				common.ErrorResp(c, err, 500, true)
+				return
+			}
+			common.SuccessResp(c, common.PageResp{
+			  Content: recordsToInfos(records),
+			  Total:   total,
+			})
+				return
+		}
 		tasks := manager.GetByCondition(func(tsk T) bool {
 			if !argsContains(tsk.GetState(), states...) {
 				return false
@@ -321,9 +362,9 @@ func getBatchHandler[T task.TaskExtensionInfo](manager task.Manager[T], callback
 	}
 }
 
-func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manager[T]) {
-	g.GET("/undone", taskListHandler(manager, undoneStates...))
-	g.GET("/done", taskListHandler(manager, doneStates...))
+func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manager[T], taskType string, useIndex bool) {
+	g.GET("/undone", taskListHandler(manager, taskType, useIndex, undoneStates...))
+	g.GET("/done", taskListHandler(manager, taskType, useIndex, doneStates...))
 	g.POST("/info", getTargetedHandler(manager, func(c *gin.Context, task T) {
 		common.SuccessResp(c, getTaskInfo(task))
 	}))
@@ -391,11 +432,11 @@ func taskRoute[T task.TaskExtensionInfo](g *gin.RouterGroup, manager task.Manage
 }
 
 func SetupTaskRoute(g *gin.RouterGroup) {
-	taskRoute(g.Group("/upload"), fs.UploadTaskManager)
-	taskRoute(g.Group("/copy"), fs.CopyTaskManager)
-	taskRoute(g.Group("/move"), fs.MoveTaskManager)
-	taskRoute(g.Group("/offline_download"), tool.DownloadTaskManager)
-	taskRoute(g.Group("/offline_download_transfer"), tool.TransferTaskManager)
-	taskRoute(g.Group("/decompress"), fs.ArchiveDownloadTaskManager)
-	taskRoute(g.Group("/decompress_upload"), fs.ArchiveContentUploadTaskManager)
+	taskRoute(g.Group("/upload"), fs.UploadTaskManager, "upload", false)
+	taskRoute(g.Group("/copy"), fs.CopyTaskManager, "copy", true)
+	taskRoute(g.Group("/move"), fs.MoveTaskManager, "move", true)
+	taskRoute(g.Group("/offline_download"), tool.DownloadTaskManager, "download", true)
+	taskRoute(g.Group("/offline_download_transfer"), tool.TransferTaskManager, "transfer", true)
+	taskRoute(g.Group("/decompress"), fs.ArchiveDownloadTaskManager, "decompress", true)
+	taskRoute(g.Group("/decompress_upload"), fs.ArchiveContentUploadTaskManager, "decompress_upload", false)
 }

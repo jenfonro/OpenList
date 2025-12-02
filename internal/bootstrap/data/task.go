@@ -39,6 +39,9 @@ func clearDisabledTaskData() {
 			if err := db.UpdateTaskData(&model.TaskItem{Key: item.Key, PersistData: "[]"}); err != nil {
 				utils.Log.Warnf("failed to clear task data for %s: %+v", item.Key, err)
 			}
+			if err := db.DeleteTaskRecordsByType(item.Key); err != nil {
+				utils.Log.Warnf("failed to clear task index for %s: %+v", item.Key, err)
+			}
 		}
 	}
 }
