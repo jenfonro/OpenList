@@ -13,7 +13,6 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
 	"github.com/OpenListTeam/OpenList/v4/internal/task"
 	"github.com/OpenListTeam/OpenList/v4/internal/task_group"
-	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/OpenListTeam/tache"
 	"github.com/pkg/errors"
@@ -48,9 +47,6 @@ func (t *FileTransferTask) GetName() string {
 }
 
 func (t *FileTransferTask) Run() error {
-	if err := t.ReinitCtx(); err != nil {
-		return err
-	}
 	if t.SrcStorage == nil {
 		if srcStorage, _, err := op.GetStorageAndActualPath(t.SrcStorageMp); err == nil {
 			t.SrcStorage = srcStorage
@@ -88,7 +84,7 @@ func (t *FileTransferTask) OnFailed() {
 }
 
 func (t *FileTransferTask) SetRetry(retry int, maxRetry int) {
-	t.TaskExtension.SetRetry(retry, maxRetry)
+	t.TaskData.SetRetry(retry, maxRetry)
 	if retry == 0 &&
 		(len(t.groupID) == 0 || // 重启恢复
 			(t.GetErr() == nil && t.GetState() != tache.StatePending)) { // 手动重试
@@ -175,9 +171,6 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath str
 }
 
 func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransferTask) error) error {
-	if utils.IsCanceled(t.Ctx()) {
-		return context.Canceled
-	}
 	t.Status = "getting src object"
 	srcObj, err := op.Get(t.Ctx(), t.SrcStorage, t.SrcActualPath)
 	if err != nil {
@@ -201,8 +194,14 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 
 		existedObjs := make(map[string]bool)
 		if t.TaskType == merge {
-			dstObjs, _ := op.List(t.Ctx(), t.DstStorage, dstActualPath, model.ListArgs{})
+			dstObjs, err := op.List(t.Ctx(), t.DstStorage, dstActualPath, model.ListArgs{})
+			if err != nil {
+				return errors.WithMessagef(err, "failed list dst [%s] objs", dstActualPath)
+			}
 			for _, obj := range dstObjs {
+				if err := t.Ctx().Err(); err != nil {
+					return err
+				}
 				if !obj.IsDir() {
 					existedObjs[obj.GetName()] = true
 				}
@@ -210,8 +209,8 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		}
 
 		for _, obj := range objs {
-			if utils.IsCanceled(t.Ctx()) {
-				return context.Canceled
+			if err := t.Ctx().Err(); err != nil {
+				return err
 			}
 
 			if t.TaskType == merge && !obj.IsDir() && existedObjs[obj.GetName()] {
@@ -242,12 +241,10 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		return nil
 	}
 
-	link, _, err := t.getLinkWithCancel()
+	t.Status = "getting src object link"
+	link, _, err := op.Link(t.Ctx(), t.SrcStorage, t.SrcActualPath, model.LinkArgs{})
 	if err != nil {
 		return errors.WithMessagef(err, "failed get [%s] link", t.SrcActualPath)
-	}
-	if utils.IsCanceled(t.Ctx()) {
-		return context.Canceled
 	}
 	// any link provided is seekable
 	ss, err := stream.NewSeekableStream(&stream.FileStream{
@@ -261,26 +258,6 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 	t.SetTotalBytes(ss.GetSize())
 	t.Status = "uploading"
 	return op.Put(t.Ctx(), t.DstStorage, t.DstActualPath, ss, t.SetProgress, true)
-}
-
-func (t *FileTransferTask) getLinkWithCancel() (*model.Link, model.Obj, error) {
-	type result struct {
-		link *model.Link
-		obj  model.Obj
-		err  error
-	}
-	resCh := make(chan result, 1)
-	ctx := t.Ctx()
-	go func() {
-		l, o, err := op.Link(ctx, t.SrcStorage, t.SrcActualPath, model.LinkArgs{})
-		resCh <- result{link: l, obj: o, err: err}
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, nil, ctx.Err()
-	case res := <-resCh:
-		return res.link, res.obj, res.err
-	}
 }
 
 var (
