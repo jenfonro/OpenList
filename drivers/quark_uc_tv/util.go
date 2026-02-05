@@ -70,8 +70,8 @@ func (d *QuarkUCTV) request(ctx context.Context, pathname string, method string,
 		return nil, err
 	}
 	// 判断 是否需要 刷新 access_token
-	if e.Status == -1 && e.Errno == 10001 {
-		// token 过期
+	if e.Status == -1 && (e.Errno == 10001 || e.Errno == 11001) {
+		// token 过期 / 无效
 		err = d.getRefreshTokenByTV(ctx, d.Addition.RefreshToken, true)
 		if err != nil {
 			return nil, err
